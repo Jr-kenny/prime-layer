@@ -100,8 +100,8 @@ export function EvidenceLedger() {
     return () => window.clearInterval(t);
   }, []);
 
-  const visible = live
-    ? [ENTRIES[index], ENTRIES[(index + 1) % ENTRIES.length], ENTRIES[(index + 2) % ENTRIES.length]]
+  const visible: Entry[] = live
+    ? [0, 1, 2].map((o) => ENTRIES[(index + o) % ENTRIES.length]!)
     : ENTRIES.slice(0, 3);
 
   return (

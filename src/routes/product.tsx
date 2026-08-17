@@ -140,7 +140,7 @@ function Product() {
   }
 
   return (
-    <div className="bg-vellum text-ink">
+    <div className="flex-1 bg-vellum text-ink">
       <section className="mx-auto max-w-4xl px-5 py-16 sm:px-8 sm:py-24">
         <p className="label-mono text-signal">Query</p>
         <h1 className="mt-5 font-display text-4xl leading-[1.05] sm:text-5xl">

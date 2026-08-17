@@ -23,7 +23,7 @@ export const Route = createFileRoute("/")({
 
 function Home() {
   return (
-    <div className="bg-ink text-vellum">
+    <div className="flex-1 bg-ink text-vellum">
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24">
         <p className="label-mono text-signal">Demand intelligence</p>
         <h1 className="mt-5 max-w-3xl font-display text-4xl leading-[1.05] sm:text-6xl">

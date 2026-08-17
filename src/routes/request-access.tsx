@@ -30,7 +30,7 @@ function RequestAccess() {
   const [sent, setSent] = useState(false);
 
   return (
-    <div className="bg-vellum text-ink">
+    <div className="flex-1 bg-vellum text-ink">
       <section className="mx-auto max-w-xl px-5 py-16 sm:px-8 sm:py-24">
         <p className="label-mono text-signal">Access</p>
         <h1 className="mt-5 font-display text-4xl leading-[1.05]">Request access</h1>

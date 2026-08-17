@@ -49,7 +49,7 @@ const sections = [
 
 function Trust() {
   return (
-    <div className="bg-ink text-vellum">
+    <div className="flex-1 bg-ink text-vellum">
       <section className="mx-auto max-w-3xl px-5 py-16 sm:px-8 sm:py-24">
         <p className="label-mono text-signal">Evidentiary rigor</p>
         <h1 className="mt-5 font-display text-4xl leading-[1.05] sm:text-5xl">

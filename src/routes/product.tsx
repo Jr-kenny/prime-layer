@@ -5,13 +5,13 @@ import { ChevronDown } from "lucide-react";
 export const Route = createFileRoute("/product")({
   head: () => ({
     meta: [
-      { title: "Product — query the Demand Graph" },
+      { title: "Product · query the Demand Graph" },
       {
         name: "description",
         content:
           "Describe what you have to move and see a short list of companies forming a need, each with confidence, timing, and an expandable evidence trail.",
       },
-      { property: "og:title", content: "Product — query the Demand Graph" },
+      { property: "og:title", content: "Product · query the Demand Graph" },
       {
         property: "og:description",
         content:
@@ -41,9 +41,24 @@ const RESULTS: Result[] = [
     window: "45 days",
     status: "verified",
     evidence: [
-      { id: "EV-4471-A", source: "Lagos planning portal", observed: "2026-07-28", note: "Permit LP-88214, 150 keys" },
-      { id: "EV-4471-B", source: "Regional trade press", observed: "2026-08-02", note: "Opening targeted for Q4" },
-      { id: "EV-4471-C", source: "Company filing", observed: "2026-08-09", note: "Capex line for guest-room AV" },
+      {
+        id: "EV-4471-A",
+        source: "Lagos planning portal",
+        observed: "2026-07-28",
+        note: "Permit LP-88214, 150 keys",
+      },
+      {
+        id: "EV-4471-B",
+        source: "Regional trade press",
+        observed: "2026-08-02",
+        note: "Opening targeted for Q4",
+      },
+      {
+        id: "EV-4471-C",
+        source: "Company filing",
+        observed: "2026-08-09",
+        note: "Capex line for guest-room AV",
+      },
     ],
   },
   {
@@ -54,8 +69,18 @@ const RESULTS: Result[] = [
     window: "90 days",
     status: "open",
     evidence: [
-      { id: "EV-4472-A", source: "Commercial lease registry", observed: "2026-07-19", note: "4 sites, 3,100 sqm total" },
-      { id: "EV-4472-B", source: "Contractor announcement", observed: "2026-08-04", note: "Fit-out start September" },
+      {
+        id: "EV-4472-A",
+        source: "Commercial lease registry",
+        observed: "2026-07-19",
+        note: "4 sites, 3,100 sqm total",
+      },
+      {
+        id: "EV-4472-B",
+        source: "Contractor announcement",
+        observed: "2026-08-04",
+        note: "Fit-out start September",
+      },
     ],
   },
   {
@@ -66,9 +91,24 @@ const RESULTS: Result[] = [
     window: "unresolved",
     status: "flagged",
     evidence: [
-      { id: "EV-4473-A", source: "Developer website", observed: "2026-06-30", note: "88 units listed" },
-      { id: "EV-4473-B", source: "Local press", observed: "2026-07-11", note: "Reports 52 units — conflicts with EV-4473-A" },
-      { id: "EV-4473-C", source: "Procurement notice", observed: "2026-08-01", note: "Soft furnishings only; AV not scoped" },
+      {
+        id: "EV-4473-A",
+        source: "Developer website",
+        observed: "2026-06-30",
+        note: "88 units listed",
+      },
+      {
+        id: "EV-4473-B",
+        source: "Local press",
+        observed: "2026-07-11",
+        note: "Reports 52 units, conflicts with EV-4473-A",
+      },
+      {
+        id: "EV-4473-C",
+        source: "Procurement notice",
+        observed: "2026-08-01",
+        note: "Soft furnishings only; AV not scoped",
+      },
     ],
   },
 ];
@@ -118,7 +158,9 @@ function ResultCard({ r }: { r: Result }) {
             <li key={e.id} className="font-mono text-xs leading-relaxed">
               <span className="text-signal">{e.id}</span>{" "}
               <span className="text-foreground">{e.source}</span>{" "}
-              <span className="text-muted-foreground">· {e.observed} · {e.note}</span>
+              <span className="text-muted-foreground">
+                · {e.observed} · {e.note}
+              </span>
             </li>
           ))}
         </ul>

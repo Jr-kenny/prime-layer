@@ -4,13 +4,13 @@ import { EvidenceLedger } from "@/components/site/EvidenceLedger";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Prime Intelligence Network — Detect markets moving" },
+      { title: "Prime Layer · Detect markets moving" },
       {
         name: "description",
         content:
           "Tell us what you sell. We find the companies developing a real reason to buy it, with the evidence, confidence, and timing behind every match.",
       },
-      { property: "og:title", content: "Prime Intelligence Network — Detect markets moving" },
+      { property: "og:title", content: "Prime Layer · Detect markets moving" },
       {
         property: "og:description",
         content:
@@ -33,16 +33,16 @@ function Home() {
         </h1>
         <p className="mt-6 max-w-xl text-base leading-relaxed text-ink-muted sm:text-lg">
           Tell the system what you sell. It returns the companies developing a real reason to buy
-          it — a hotel opening 150 rooms, a chain signing new sites — before they have said so
-          publicly.
+          it, such as a hotel opening 150 rooms or a chain signing new sites, before they have said
+          so publicly.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-4">
           <Link
-            to="/request-access"
+            to="/app"
             className="rounded-sm bg-signal px-5 py-2.5 text-sm font-medium text-ink transition-opacity hover:opacity-90"
           >
-            Request access
+            Enter the app
           </Link>
           <Link
             to="/product"

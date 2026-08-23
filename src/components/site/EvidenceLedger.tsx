@@ -61,7 +61,9 @@ function Row({ entry }: { entry: Entry }) {
     <li className="animate-ledger-in border-t border-ink-border px-4 py-4 first:border-t-0 sm:px-6">
       <div className="flex items-baseline justify-between gap-4">
         <span className="label-mono text-ink-muted">{entry.id}</span>
-        <span className={`label-mono ${statusText[entry.status]}`}>{statusLabel[entry.status]}</span>
+        <span className={`label-mono ${statusText[entry.status]}`}>
+          {statusLabel[entry.status]}
+        </span>
       </div>
       <dl className="mt-3 space-y-1.5 font-mono text-[0.8125rem] leading-relaxed">
         <div className="flex flex-col gap-x-4 sm:flex-row">
@@ -110,7 +112,7 @@ export function EvidenceLedger() {
       className="rounded-md border border-ink-border bg-slate/60"
     >
       <div className="flex items-center justify-between border-b border-ink-border px-4 py-3 sm:px-6">
-        <span className="label-mono text-ink-muted">Evidence ledger — live</span>
+        <span className="label-mono text-ink-muted">Evidence ledger · live</span>
         <span className="flex items-center gap-2">
           <span className="size-1.5 rounded-full bg-signal animate-signal-pulse" aria-hidden />
           <span className="label-mono text-signal">streaming</span>

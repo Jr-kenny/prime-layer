@@ -3,13 +3,13 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 export const Route = createFileRoute("/how-it-works")({
   head: () => ({
     meta: [
-      { title: "How it works — Prime Intelligence Network" },
+      { title: "How it works · Prime Layer" },
       {
         name: "description",
         content:
           "Signal, Evidence, Prediction, Outcome: the four-step loop behind the Demand Graph, including how evidence from multiple agents is clustered into independent sources.",
       },
-      { property: "og:title", content: "How it works — Prime Intelligence Network" },
+      { property: "og:title", content: "How it works · Prime Layer" },
       {
         property: "og:description",
         content:
@@ -39,7 +39,7 @@ const steps = [
   {
     n: "04",
     title: "Outcome",
-    body: "Predictions are checked against what actually happens — the order placed, the tender published, the opening delayed. Hits and misses both feed back into how sources are weighted and how timing windows are drawn.",
+    body: "Predictions are checked against what actually happens, the order placed, the tender published, or the opening delayed. Hits and misses both feed back into how sources are weighted and how timing windows are drawn.",
   },
 ];
 
@@ -81,11 +81,11 @@ function HowItWorks() {
           <div className="mt-8 grid items-center gap-6 sm:grid-cols-[1fr_auto_1fr]">
             <ul className="space-y-2">
               {[
-                "Agent A — planning portal",
-                "Agent B — planning portal",
-                "Agent C — local press",
-                "Agent D — local press",
-                "Agent E — company filing",
+                "Agent A · planning portal",
+                "Agent B · planning portal",
+                "Agent C · local press",
+                "Agent D · local press",
+                "Agent E · company filing",
               ].map((a) => (
                 <li
                   key={a}
@@ -95,10 +95,7 @@ function HowItWorks() {
                 </li>
               ))}
             </ul>
-            <div
-              aria-hidden
-              className="mx-auto h-px w-full bg-signal sm:h-40 sm:w-px"
-            />
+            <div aria-hidden className="mx-auto h-px w-full bg-signal sm:h-40 sm:w-px" />
             <div className="rounded-sm border border-signal/50 bg-background p-4">
               <p className="label-mono text-signal">Evidence cluster EV-4471</p>
               <ul className="mt-3 space-y-1.5 font-mono text-xs text-muted-foreground">
@@ -107,7 +104,7 @@ function HowItWorks() {
                 <li>SOURCE 3 company filing (1 agent)</li>
               </ul>
               <p className="mt-4 font-mono text-xs text-verified">
-                5 agents, 3 independent sources — confidence 82%
+                5 agents, 3 independent sources · confidence 82%
               </p>
             </div>
           </div>

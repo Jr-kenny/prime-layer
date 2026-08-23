@@ -55,7 +55,7 @@ export const EVIDENCE: EvidenceItem[] = [
   {
     id: "EV-94821",
     company: "ABC Manufacturing",
-    claim: "Factory permit filed — 80,000 sqm",
+    claim: "Factory permit filed · 80,000 sqm",
     source: "Nigeria planning record",
     sourceType: "Public registry",
     agent: "Nigeria Construction Agent",
@@ -194,7 +194,11 @@ export const OPPORTUNITIES: Opportunity[] = [
       "Grid reliability issues mentioned publicly",
       "Facility completion expected Q4",
     ],
-    agents: ["Nigeria Construction Agent", "Energy Infrastructure Agent", "Prime Corporate Crawler"],
+    agents: [
+      "Nigeria Construction Agent",
+      "Energy Infrastructure Agent",
+      "Prime Corporate Crawler",
+    ],
     evidenceIds: ["EV-94821", "EV-94822", "EV-94801", "EV-94810", "EV-94823"],
     contradiction:
       "One source reports the facility opening moved to Q1 2027. This reduces timing confidence but does not invalidate the expansion.",
@@ -236,7 +240,11 @@ export const OPPORTUNITIES: Opportunity[] = [
       "Guest-room AV capex disclosed",
       "Opening targeted before year end",
     ],
-    agents: ["Nigeria Construction Agent", "Hospitality Expansion Agent", "Prime Corporate Crawler"],
+    agents: [
+      "Nigeria Construction Agent",
+      "Hospitality Expansion Agent",
+      "Prime Corporate Crawler",
+    ],
     evidenceIds: ["EV-94744", "EV-94745", "EV-94746"],
     timeline: [
       { period: "JUNE", event: "Site secured" },
@@ -395,10 +403,120 @@ export const SUPPLY: SupplyRecord[] = [
 ];
 
 export const AGENTS = [
-  { name: "Nigeria Construction Agent", type: "Independent", evidence: 41, unique: "62%" },
-  { name: "Energy Infrastructure Agent", type: "Independent", evidence: 18, unique: "48%" },
-  { name: "Prime Corporate Crawler", type: "Prime", evidence: 96, unique: "31%" },
-  { name: "Prime Jobs Agent", type: "Prime", evidence: 77, unique: "44%" },
-  { name: "Financial Regulation Agent", type: "Independent", evidence: 12, unique: "71%" },
-  { name: "Hospitality Expansion Agent", type: "Independent", evidence: 26, unique: "55%" },
+  {
+    name: "Nigeria Construction Agent",
+    type: "Independent",
+    specialty: "Construction permits & site filings",
+    evidence: 41,
+    unique: 62,
+    reliability: 0.91,
+  },
+  {
+    name: "Energy Infrastructure Agent",
+    type: "Independent",
+    specialty: "Grid events & power procurement",
+    evidence: 18,
+    unique: 48,
+    reliability: 0.84,
+  },
+  {
+    name: "Prime Corporate Crawler",
+    type: "Prime",
+    specialty: "Company announcements & filings",
+    evidence: 96,
+    unique: 31,
+    reliability: 0.88,
+  },
+  {
+    name: "Prime Jobs Agent",
+    type: "Prime",
+    specialty: "Hiring signals across job boards",
+    evidence: 77,
+    unique: 44,
+    reliability: 0.9,
+  },
+  {
+    name: "Financial Regulation Agent",
+    type: "Independent",
+    specialty: "Licensing & regulatory movement",
+    evidence: 12,
+    unique: 71,
+    reliability: 0.95,
+  },
+  {
+    name: "Hospitality Expansion Agent",
+    type: "Independent",
+    specialty: "Hotel openings & fit-out pipelines",
+    evidence: 26,
+    unique: 55,
+    reliability: 0.87,
+  },
+];
+
+export type ContributionTier = "discovery" | "confirmation" | "duplication";
+
+export type Contribution = {
+  id: string;
+  agent: string;
+  claim: string;
+  tier: ContributionTier;
+  dims: {
+    relevance: number;
+    quality: number;
+    independence: number;
+    reliability: number;
+    impact: number;
+  };
+  inquiry: string;
+};
+
+export const CONTRIBUTIONS: Contribution[] = [
+  {
+    id: "CTB-3311",
+    agent: "Nigeria Construction Agent",
+    claim: "ABC Manufacturing filed a construction permit for a second production hall.",
+    tier: "discovery",
+    dims: { relevance: 0.94, quality: 0.88, independence: 0.97, reliability: 0.91, impact: 0.83 },
+    inquiry: "INQ-208 · Industrial energy demand, Ogun State",
+  },
+  {
+    id: "CTB-3308",
+    agent: "Prime Jobs Agent",
+    claim: "213 new manufacturing roles posted across two job boards in 11 days.",
+    tier: "discovery",
+    dims: { relevance: 0.81, quality: 0.74, independence: 0.92, reliability: 0.9, impact: 0.68 },
+    inquiry: "INQ-208 · Industrial energy demand, Ogun State",
+  },
+  {
+    id: "CTB-3302",
+    agent: "Hospitality Expansion Agent",
+    claim: "Marlowe Bay Hotels confirmed fit-out contractor for a 150-room property.",
+    tier: "discovery",
+    dims: { relevance: 0.97, quality: 0.91, independence: 0.89, reliability: 0.87, impact: 0.94 },
+    inquiry: "INQ-204 · Hospitality AV & HVAC, Lagos",
+  },
+  {
+    id: "CTB-3297",
+    agent: "Energy Infrastructure Agent",
+    claim: "Ogun State grid reliability advisory issued for industrial feeders.",
+    tier: "confirmation",
+    dims: { relevance: 0.86, quality: 0.69, independence: 0.41, reliability: 0.84, impact: 0.52 },
+    inquiry: "INQ-208 · Industrial energy demand, Ogun State",
+  },
+  {
+    id: "CTB-3295",
+    agent: "Financial Regulation Agent",
+    claim: "Meridian Fintech obtained a payment-service licence in a new market.",
+    tier: "discovery",
+    dims: { relevance: 0.92, quality: 0.95, independence: 1.0, reliability: 0.95, impact: 0.79 },
+    inquiry: "INQ-201 · Fraud infrastructure, East Africa",
+  },
+  {
+    id: "CTB-3290",
+    agent: "Prime Corporate Crawler",
+    claim: "Local press item repeating the Marlowe Bay expansion announcement.",
+    tier: "duplication",
+    dims: { relevance: 0.93, quality: 0.58, independence: 0.08, reliability: 0.88, impact: 0.11 },
+    inquiry: "INQ-204 · Hospitality AV & HVAC, Lagos",
+  },
 ];

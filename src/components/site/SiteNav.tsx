@@ -3,9 +3,10 @@ import { useState } from "react";
 import { Menu, X } from "lucide-react";
 
 const links = [
-  { to: "/", label: "Home" },
-  { to: "/how-it-works", label: "How it works" },
   { to: "/product", label: "Product" },
+  { to: "/network", label: "Network" },
+  { to: "/how-it-works", label: "How it works" },
+  { to: "/developers", label: "Developers" },
   { to: "/trust", label: "Trust" },
 ] as const;
 
@@ -20,9 +21,7 @@ export function SiteNav() {
       >
         <Link to="/" className="flex items-center gap-2.5" onClick={() => setOpen(false)}>
           <span className="size-2 rounded-full bg-signal animate-signal-pulse" aria-hidden />
-          <span className="font-display text-base font-semibold tracking-tight">
-            Prime Intelligence Network
-          </span>
+          <span className="font-display text-base font-semibold tracking-tight">Prime Layer</span>
         </Link>
 
         <div className="hidden items-center gap-7 md:flex">
@@ -30,17 +29,17 @@ export function SiteNav() {
             <Link
               key={l.to}
               to={l.to}
-              activeOptions={{ exact: l.to === "/" }}
+              activeOptions={{ exact: true }}
               className="text-sm text-ink-muted transition-colors hover:text-vellum data-[status=active]:text-signal"
             >
               {l.label}
             </Link>
           ))}
           <Link
-            to="/request-access"
-            className="rounded-sm border border-signal px-3.5 py-1.5 text-sm text-signal transition-colors hover:bg-signal hover:text-ink"
+            to="/app"
+            className="rounded-sm bg-signal px-4 py-1.5 text-sm font-medium text-ink transition-opacity hover:opacity-90"
           >
-            Request access
+            Enter
           </Link>
         </div>
 
@@ -62,7 +61,7 @@ export function SiteNav() {
               <li key={l.to}>
                 <Link
                   to={l.to}
-                  activeOptions={{ exact: l.to === "/" }}
+                  activeOptions={{ exact: true }}
                   onClick={() => setOpen(false)}
                   className="block py-2.5 text-sm text-ink-muted data-[status=active]:text-signal"
                 >
@@ -72,11 +71,11 @@ export function SiteNav() {
             ))}
             <li>
               <Link
-                to="/request-access"
+                to="/app"
                 onClick={() => setOpen(false)}
                 className="mt-2 inline-block rounded-sm border border-signal px-3.5 py-1.5 text-sm text-signal"
               >
-                Request access
+                Enter
               </Link>
             </li>
           </ul>

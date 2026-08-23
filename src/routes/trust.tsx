@@ -3,13 +3,13 @@ import { createFileRoute } from "@tanstack/react-router";
 export const Route = createFileRoute("/trust")({
   head: () => ({
     meta: [
-      { title: "Trust and evidentiary rigor — Prime Intelligence Network" },
+      { title: "Trust and evidentiary rigor · Prime Layer" },
       {
         name: "description",
         content:
           "How confidence is calculated, how sources are counted, how disagreement is surfaced, and how predictions are audited against outcomes.",
       },
-      { property: "og:title", content: "Trust and evidentiary rigor — Prime Intelligence Network" },
+      { property: "og:title", content: "Trust and evidentiary rigor · Prime Layer" },
       {
         property: "og:description",
         content:
@@ -31,7 +31,7 @@ const sections = [
   },
   {
     title: "Disagreement is shown, not hidden",
-    body: "When sources conflict — a filing says 150 rooms and a press report says 90 — both are kept, the conflict is flagged, and confidence is reduced accordingly. We do not average conflicting evidence into a single tidy figure.",
+    body: "When sources conflict, a filing says 150 rooms and a press report says 90, both are kept, the conflict is flagged, and confidence is reduced accordingly. We do not average conflicting evidence into a single tidy figure.",
   },
   {
     title: "Repetition is not corroboration",
@@ -72,9 +72,11 @@ function Trust() {
         <div className="mt-10 rounded-md border border-ink-border bg-slate/60 p-6">
           <p className="label-mono text-ink-muted">Status legend</p>
           <ul className="mt-4 space-y-2 font-mono text-xs">
-            <li className="text-verified">VERIFIED — outcome confirmed or 3+ independent sources</li>
-            <li className="text-signal">TRACKING — within an open timing window</li>
-            <li className="text-flag">CONTRADICTION — sources conflict, confidence reduced</li>
+            <li className="text-verified">
+              VERIFIED · outcome confirmed or 3+ independent sources
+            </li>
+            <li className="text-signal">TRACKING · within an open timing window</li>
+            <li className="text-flag">CONTRADICTION · sources conflict, confidence reduced</li>
           </ul>
         </div>
       </section>

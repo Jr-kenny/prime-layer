@@ -10,14 +10,34 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AppRouteImport } from './routes/app'
+import { Route as DevelopersRouteImport } from './routes/developers'
 import { Route as HowItWorksRouteImport } from './routes/how-it-works'
+import { Route as NetworkRouteImport } from './routes/network'
 import { Route as ProductRouteImport } from './routes/product'
-import { Route as RequestAccessRouteImport } from './routes/request-access'
 import { Route as TrustRouteImport } from './routes/trust'
+import { Route as AppIndexRouteImport } from './routes/app.index'
+import { Route as AppAgentsRouteImport } from './routes/app.agents'
+import { Route as AppContributionsRouteImport } from './routes/app.contributions'
+import { Route as AppDemandGraphRouteImport } from './routes/app.demand-graph'
+import { Route as AppDevelopersRouteImport } from './routes/app.developers'
+import { Route as AppEvidenceRouteImport } from './routes/app.evidence'
+import { Route as AppSupplyRouteImport } from './routes/app.supply'
+import { Route as AppOpportunitiesIdRouteImport } from './routes/app.opportunities.$id'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AppRoute = AppRouteImport.update({
+  id: '/app',
+  path: '/app',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DevelopersRoute = DevelopersRouteImport.update({
+  id: '/developers',
+  path: '/developers',
   getParentRoute: () => rootRouteImport,
 } as any)
 const HowItWorksRoute = HowItWorksRouteImport.update({
@@ -25,14 +45,14 @@ const HowItWorksRoute = HowItWorksRouteImport.update({
   path: '/how-it-works',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NetworkRoute = NetworkRouteImport.update({
+  id: '/network',
+  path: '/network',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ProductRoute = ProductRouteImport.update({
   id: '/product',
   path: '/product',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RequestAccessRoute = RequestAccessRouteImport.update({
-  id: '/request-access',
-  path: '/request-access',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TrustRoute = TrustRouteImport.update({
@@ -40,48 +60,158 @@ const TrustRoute = TrustRouteImport.update({
   path: '/trust',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AppIndexRoute = AppIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppAgentsRoute = AppAgentsRouteImport.update({
+  id: '/agents',
+  path: '/agents',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppContributionsRoute = AppContributionsRouteImport.update({
+  id: '/contributions',
+  path: '/contributions',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDemandGraphRoute = AppDemandGraphRouteImport.update({
+  id: '/demand-graph',
+  path: '/demand-graph',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppDevelopersRoute = AppDevelopersRouteImport.update({
+  id: '/developers',
+  path: '/developers',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppEvidenceRoute = AppEvidenceRouteImport.update({
+  id: '/evidence',
+  path: '/evidence',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppSupplyRoute = AppSupplyRouteImport.update({
+  id: '/supply',
+  path: '/supply',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOpportunitiesIdRoute = AppOpportunitiesIdRouteImport.update({
+  id: '/opportunities/$id',
+  path: '/opportunities/$id',
+  getParentRoute: () => AppRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/developers': typeof DevelopersRoute
   '/how-it-works': typeof HowItWorksRoute
+  '/network': typeof NetworkRoute
   '/product': typeof ProductRoute
-  '/request-access': typeof RequestAccessRoute
   '/trust': typeof TrustRoute
+  '/app/agents': typeof AppAgentsRoute
+  '/app/contributions': typeof AppContributionsRoute
+  '/app/demand-graph': typeof AppDemandGraphRoute
+  '/app/developers': typeof AppDevelopersRoute
+  '/app/evidence': typeof AppEvidenceRoute
+  '/app/supply': typeof AppSupplyRoute
+  '/app/': typeof AppIndexRoute
+  '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/developers': typeof DevelopersRoute
   '/how-it-works': typeof HowItWorksRoute
+  '/network': typeof NetworkRoute
   '/product': typeof ProductRoute
-  '/request-access': typeof RequestAccessRoute
   '/trust': typeof TrustRoute
+  '/app/agents': typeof AppAgentsRoute
+  '/app/contributions': typeof AppContributionsRoute
+  '/app/demand-graph': typeof AppDemandGraphRoute
+  '/app/developers': typeof AppDevelopersRoute
+  '/app/evidence': typeof AppEvidenceRoute
+  '/app/supply': typeof AppSupplyRoute
+  '/app': typeof AppIndexRoute
+  '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/app': typeof AppRouteWithChildren
+  '/developers': typeof DevelopersRoute
   '/how-it-works': typeof HowItWorksRoute
+  '/network': typeof NetworkRoute
   '/product': typeof ProductRoute
-  '/request-access': typeof RequestAccessRoute
   '/trust': typeof TrustRoute
+  '/app/agents': typeof AppAgentsRoute
+  '/app/contributions': typeof AppContributionsRoute
+  '/app/demand-graph': typeof AppDemandGraphRoute
+  '/app/developers': typeof AppDevelopersRoute
+  '/app/evidence': typeof AppEvidenceRoute
+  '/app/supply': typeof AppSupplyRoute
+  '/app/': typeof AppIndexRoute
+  '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/how-it-works' | '/product' | '/request-access' | '/trust'
+  fullPaths:
+    | '/'
+    | '/app'
+    | '/developers'
+    | '/how-it-works'
+    | '/network'
+    | '/product'
+    | '/trust'
+    | '/app/agents'
+    | '/app/contributions'
+    | '/app/demand-graph'
+    | '/app/developers'
+    | '/app/evidence'
+    | '/app/supply'
+    | '/app/'
+    | '/app/opportunities/$id'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/how-it-works' | '/product' | '/request-access' | '/trust'
+  to:
+    | '/'
+    | '/developers'
+    | '/how-it-works'
+    | '/network'
+    | '/product'
+    | '/trust'
+    | '/app/agents'
+    | '/app/contributions'
+    | '/app/demand-graph'
+    | '/app/developers'
+    | '/app/evidence'
+    | '/app/supply'
+    | '/app'
+    | '/app/opportunities/$id'
   id:
     | '__root__'
     | '/'
+    | '/app'
+    | '/developers'
     | '/how-it-works'
+    | '/network'
     | '/product'
-    | '/request-access'
     | '/trust'
+    | '/app/agents'
+    | '/app/contributions'
+    | '/app/demand-graph'
+    | '/app/developers'
+    | '/app/evidence'
+    | '/app/supply'
+    | '/app/'
+    | '/app/opportunities/$id'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AppRoute: typeof AppRouteWithChildren
+  DevelopersRoute: typeof DevelopersRoute
   HowItWorksRoute: typeof HowItWorksRoute
+  NetworkRoute: typeof NetworkRoute
   ProductRoute: typeof ProductRoute
-  RequestAccessRoute: typeof RequestAccessRoute
   TrustRoute: typeof TrustRoute
 }
 
@@ -94,11 +224,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app': {
+      id: '/app'
+      path: '/app'
+      fullPath: '/app'
+      preLoaderRoute: typeof AppRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/developers': {
+      id: '/developers'
+      path: '/developers'
+      fullPath: '/developers'
+      preLoaderRoute: typeof DevelopersRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/how-it-works': {
       id: '/how-it-works'
       path: '/how-it-works'
       fullPath: '/how-it-works'
       preLoaderRoute: typeof HowItWorksRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/network': {
+      id: '/network'
+      path: '/network'
+      fullPath: '/network'
+      preLoaderRoute: typeof NetworkRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/product': {
@@ -108,13 +259,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ProductRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/request-access': {
-      id: '/request-access'
-      path: '/request-access'
-      fullPath: '/request-access'
-      preLoaderRoute: typeof RequestAccessRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/trust': {
       id: '/trust'
       path: '/trust'
@@ -122,14 +266,96 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TrustRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/app/': {
+      id: '/app/'
+      path: '/'
+      fullPath: '/app/'
+      preLoaderRoute: typeof AppIndexRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/agents': {
+      id: '/app/agents'
+      path: '/agents'
+      fullPath: '/app/agents'
+      preLoaderRoute: typeof AppAgentsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/contributions': {
+      id: '/app/contributions'
+      path: '/contributions'
+      fullPath: '/app/contributions'
+      preLoaderRoute: typeof AppContributionsRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/demand-graph': {
+      id: '/app/demand-graph'
+      path: '/demand-graph'
+      fullPath: '/app/demand-graph'
+      preLoaderRoute: typeof AppDemandGraphRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/developers': {
+      id: '/app/developers'
+      path: '/developers'
+      fullPath: '/app/developers'
+      preLoaderRoute: typeof AppDevelopersRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/evidence': {
+      id: '/app/evidence'
+      path: '/evidence'
+      fullPath: '/app/evidence'
+      preLoaderRoute: typeof AppEvidenceRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/supply': {
+      id: '/app/supply'
+      path: '/supply'
+      fullPath: '/app/supply'
+      preLoaderRoute: typeof AppSupplyRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/app/opportunities/$id': {
+      id: '/app/opportunities/$id'
+      path: '/opportunities/$id'
+      fullPath: '/app/opportunities/$id'
+      preLoaderRoute: typeof AppOpportunitiesIdRouteImport
+      parentRoute: typeof AppRoute
+    }
   }
 }
 
+interface AppRouteChildren {
+  AppAgentsRoute: typeof AppAgentsRoute
+  AppContributionsRoute: typeof AppContributionsRoute
+  AppDemandGraphRoute: typeof AppDemandGraphRoute
+  AppDevelopersRoute: typeof AppDevelopersRoute
+  AppEvidenceRoute: typeof AppEvidenceRoute
+  AppSupplyRoute: typeof AppSupplyRoute
+  AppIndexRoute: typeof AppIndexRoute
+  AppOpportunitiesIdRoute: typeof AppOpportunitiesIdRoute
+}
+
+const AppRouteChildren: AppRouteChildren = {
+  AppAgentsRoute: AppAgentsRoute,
+  AppContributionsRoute: AppContributionsRoute,
+  AppDemandGraphRoute: AppDemandGraphRoute,
+  AppDevelopersRoute: AppDevelopersRoute,
+  AppEvidenceRoute: AppEvidenceRoute,
+  AppSupplyRoute: AppSupplyRoute,
+  AppIndexRoute: AppIndexRoute,
+  AppOpportunitiesIdRoute: AppOpportunitiesIdRoute,
+}
+
+const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AppRoute: AppRouteWithChildren,
+  DevelopersRoute: DevelopersRoute,
   HowItWorksRoute: HowItWorksRoute,
+  NetworkRoute: NetworkRoute,
   ProductRoute: ProductRoute,
-  RequestAccessRoute: RequestAccessRoute,
   TrustRoute: TrustRoute,
 }
 export const routeTree = rootRouteImport

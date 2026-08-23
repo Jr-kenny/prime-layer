@@ -1,6 +1,15 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { ArrowLeft } from "lucide-react";
-import { evidenceById, opportunityById, statusLabel, statusText } from "@/lib/demo-data";
+import { ArrowLeft, ArrowUpRight, FileCheck2, GitBranch, ShieldCheck } from "lucide-react";
+import {
+  ContradictionNote,
+  ConfidenceValue,
+  EvidenceMarker,
+  SectionHeading,
+  SignalRule,
+  StatusPill,
+  type StatusTone,
+} from "@/components/app/AppUI";
+import { evidenceById, opportunityById } from "@/lib/demo-data";
 
 export const Route = createFileRoute("/app/opportunities/$id")({
   loader: ({ params }) => {
@@ -14,14 +23,13 @@ export const Route = createFileRoute("/app/opportunities/$id")({
         meta: [{ title: "Opportunity unavailable" }, { name: "robots", content: "noindex" }],
       };
     }
-    const o = loaderData.opportunity;
-    const title = `${o.company} — ${o.need} · ${o.confidence}% confidence`;
+    const opportunity = loaderData.opportunity;
+    const title = `${opportunity.company} · ${opportunity.need} · Prime Layer`;
     return {
       meta: [
         { title },
-        { name: "description", content: o.summary },
-        { property: "og:title", content: title },
-        { property: "og:description", content: o.summary },
+        { name: "description", content: opportunity.summary },
+        { name: "robots", content: "noindex" },
       ],
     };
   },
@@ -29,177 +37,260 @@ export const Route = createFileRoute("/app/opportunities/$id")({
   component: OpportunityDetail,
 });
 
+function toneFor(status: "verified" | "flagged" | "open"): StatusTone {
+  if (status === "flagged") return "flagged";
+  if (status === "open") return "tracking";
+  return "verified";
+}
+
 function OpportunityNotFound() {
   return (
-    <div className="px-5 py-16 sm:px-8">
-      <h1 className="font-display text-2xl">This opportunity is no longer tracked</h1>
-      <Link to="/app/opportunities" className="mt-4 inline-block text-sm text-signal hover:underline">
-        Back to opportunities
+    <div className="app-content">
+      <h1 className="font-display text-2xl">This case is no longer on file</h1>
+      <Link
+        to="/app"
+        className="mt-4 inline-flex items-center gap-2 text-sm text-signal hover:text-ink"
+      >
+        <ArrowLeft className="size-4" aria-hidden /> Back to Intelligence
       </Link>
     </div>
   );
 }
 
 function OpportunityDetail() {
-  const { opportunity: o } = Route.useLoaderData();
-  const evidence = o.evidenceIds.map(evidenceById).filter(Boolean);
-  const independentSources = new Set(evidence.map((e) => e!.source)).size;
+  const { opportunity } = Route.useLoaderData();
+  const evidence = opportunity.evidenceIds
+    .map(evidenceById)
+    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const independentSources = new Set(evidence.map((item) => item.source)).size;
+  const tone = toneFor(opportunity.status);
 
   return (
     <div>
-      <header className="border-b border-ink-border bg-ink px-5 py-8 text-vellum sm:px-8">
-        <Link
-          to="/app/opportunities"
-          className="inline-flex items-center gap-1.5 label-mono text-ink-muted hover:text-signal"
-        >
-          <ArrowLeft className="size-3.5" /> Opportunities
-        </Link>
-        <p className="label-mono mt-6 text-signal">Intelligence dossier</p>
-        <h1 className="mt-2 font-display text-3xl uppercase tracking-tight sm:text-4xl">
-          {o.company}
-        </h1>
-        <p className="mt-1 font-mono text-xs text-ink-muted">
-          {o.location.toUpperCase()} · {o.industry.toUpperCase()}
-        </p>
-
-        <dl className="mt-8 grid gap-x-8 gap-y-6 sm:grid-cols-2 lg:grid-cols-4">
-          <div>
-            <dt className="label-mono text-ink-muted">Likely need</dt>
-            <dd className="mt-1 text-base text-vellum">{o.need}</dd>
-          </div>
-          <div>
-            <dt className="label-mono text-ink-muted">Confidence</dt>
-            <dd className={`mt-1 font-mono text-3xl ${statusText[o.status]}`}>{o.confidence}%</dd>
-          </div>
-          <div>
-            <dt className="label-mono text-ink-muted">Estimated buying window</dt>
-            <dd className="mt-1 text-base text-vellum">{o.window}</dd>
-          </div>
-          <div>
-            <dt className="label-mono text-ink-muted">Estimated opportunity</dt>
-            <dd className="mt-1 text-base text-vellum">{o.size}</dd>
-          </div>
-        </dl>
-      </header>
-
-      <div className="grid gap-10 px-5 py-10 sm:px-8 lg:grid-cols-[1fr_20rem]">
-        <div className="min-w-0 space-y-10">
-          <section aria-labelledby="why">
-            <h2 id="why" className="font-display text-xl">
-              Why Prime believes this
-            </h2>
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-muted-foreground">
-              {o.summary}
-            </p>
-            <ol className="mt-5 space-y-2">
-              {o.reasons.map((r, i) => (
-                <li key={r} className="flex gap-4 border-t border-border pt-2 text-sm">
-                  <span className="font-mono text-xs text-signal">
-                    {String(i + 1).padStart(2, "0")}
-                  </span>
-                  <span>{r}</span>
-                </li>
-              ))}
-            </ol>
-          </section>
-
-          <section aria-labelledby="evidence">
-            <div className="flex items-baseline justify-between gap-4">
-              <h2 id="evidence" className="font-display text-xl">
-                Evidence
-              </h2>
-              <p className="label-mono text-muted-foreground">
-                {o.agents.length} agents · {independentSources} independent sources
+      <header className="app-overview-hero">
+        <div className="app-overview-hero-inner">
+          <Link
+            to="/app"
+            className="inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-ink-muted hover:text-signal"
+          >
+            <ArrowLeft className="size-3.5" aria-hidden /> Intelligence command
+          </Link>
+          <div className="mt-9 flex flex-wrap items-start justify-between gap-6">
+            <div>
+              <p className="label-mono text-signal">Intelligence dossier · {opportunity.id}</p>
+              <h1 className="mt-3 max-w-3xl uppercase">{opportunity.company}</h1>
+              <p className="mt-3 font-mono text-xs uppercase tracking-[0.08em] text-ink-muted">
+                {opportunity.location} · {opportunity.industry}
               </p>
             </div>
-            <ul className="mt-4 divide-y divide-border rounded-md border border-border bg-card">
-              {evidence.map((e) => (
-                <li key={e!.id} className="p-4">
-                  <div className="flex items-baseline justify-between gap-4">
-                    <span className="label-mono text-signal">{e!.id}</span>
-                    <span className={`label-mono ${statusText[e!.status]}`}>
-                      {statusLabel[e!.status]}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm">{e!.claim}</p>
-                  <p className="mt-1 font-mono text-xs text-muted-foreground">
-                    {e!.source} · {e!.sourceType} · surfaced by {e!.agent} · observed {e!.observed}
-                  </p>
-                  {e!.note && (
-                    <p className="mt-1 font-mono text-xs text-muted-foreground">{e!.note}</p>
-                  )}
-                </li>
-              ))}
-            </ul>
-          </section>
+            <StatusPill
+              tone={tone}
+              {...(opportunity.status === "verified" ? { label: "High-confidence case" } : {})}
+            />
+          </div>
 
-          {o.contradiction && (
-            <section aria-labelledby="contradiction">
-              <h2 id="contradiction" className="font-display text-xl">
-                Contradictions
-              </h2>
-              <p className="mt-3 rounded-md border-l-2 border-flag bg-card p-4 text-sm leading-relaxed">
-                {o.contradiction}
-              </p>
-            </section>
-          )}
-
-          <section aria-labelledby="timeline">
-            <h2 id="timeline" className="font-display text-xl">
-              Timeline
-            </h2>
-            <ol className="mt-4 border-l border-border pl-5">
-              {o.timeline.map((t) => (
-                <li key={`${t.period}-${t.event}`} className="relative pb-5 last:pb-0">
-                  <span
-                    className="absolute -left-[1.4rem] top-1.5 size-1.5 rounded-full bg-signal"
-                    aria-hidden
-                  />
-                  <p className="label-mono text-muted-foreground">{t.period}</p>
-                  <p className="text-sm">{t.event}</p>
-                </li>
-              ))}
-            </ol>
-          </section>
+          <dl className="mt-9 grid gap-6 border-t border-ink-border pt-5 sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="label-mono text-ink-muted">Likely need</dt>
+              <dd className="mt-2 font-display text-xl text-vellum">{opportunity.need}</dd>
+            </div>
+            <div>
+              <dt className="label-mono text-ink-muted">Confidence</dt>
+              <dd className="mt-2">
+                <ConfidenceValue
+                  value={opportunity.confidence}
+                  delta={opportunity.delta}
+                  tone={tone}
+                />
+              </dd>
+            </div>
+            <div>
+              <dt className="label-mono text-ink-muted">Estimated buying window</dt>
+              <dd className="mt-2 font-mono text-sm text-vellum">{opportunity.window}</dd>
+            </div>
+            <div>
+              <dt className="label-mono text-ink-muted">Estimated opportunity</dt>
+              <dd className="mt-2 font-mono text-sm text-vellum">{opportunity.size}</dd>
+            </div>
+          </dl>
         </div>
+      </header>
 
-        <aside className="space-y-6">
-          <section className="rounded-md border border-border bg-card p-5">
-            <h2 className="label-mono text-muted-foreground">Contributing agents</h2>
-            <ul className="mt-3 space-y-2 text-sm">
-              {o.agents.map((a) => (
-                <li key={a} className="flex items-baseline gap-2">
-                  <span className="size-1.5 shrink-0 rounded-full bg-signal" aria-hidden />
-                  {a}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-4 font-mono text-[0.6875rem] leading-relaxed text-muted-foreground">
-              Agents return claims and evidence. Prime Layer clusters, resolves and scores. Agents
-              never answer the customer directly.
-            </p>
-          </section>
+      <div className="app-content">
+        <div className="grid gap-10 xl:grid-cols-[minmax(0,1.3fr)_minmax(18rem,0.7fr)]">
+          <div className="min-w-0 space-y-10">
+            <section aria-labelledby="why-prime-believes">
+              <SectionHeading
+                eyebrow="Inference record"
+                title="Why Prime Layer believes this"
+                action={
+                  <span className="label-mono text-muted-foreground">5 reasons attached</span>
+                }
+              />
+              <p className="mt-3 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                {opportunity.summary}
+              </p>
+              <ol className="mt-5 border-t border-border">
+                {opportunity.reasons.map((reason, index) => (
+                  <li key={reason} className="app-signal-rule">
+                    <span className="font-mono text-xs text-signal">
+                      {String(index + 1).padStart(2, "0")}
+                    </span>
+                    <span>{reason}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
 
-          {o.otherNeeds.length > 0 && (
-            <section className="rounded-md border border-border bg-card p-5">
-              <h2 className="label-mono text-muted-foreground">Other emerging needs</h2>
-              <ul className="mt-3 space-y-2">
-                {o.otherNeeds.map((n) => (
-                  <li key={n.need} className="flex items-baseline justify-between gap-4 text-sm">
-                    <span>{n.need}</span>
-                    <span className="font-mono text-signal">{n.confidence}%</span>
+            <section aria-labelledby="evidence-trail">
+              <SectionHeading
+                eyebrow="Case file"
+                title="Evidence trail"
+                action={
+                  <span className="label-mono text-muted-foreground">
+                    {opportunity.agents.length} agents · {independentSources} independent sources
+                  </span>
+                }
+              />
+              <div className="surface mt-5 p-5 sm:p-6">
+                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="grid size-8 place-items-center border border-signal text-signal">
+                      <FileCheck2 className="size-4" aria-hidden />
+                    </span>
+                    <div>
+                      <p className="font-display text-lg">Clustered evidence record</p>
+                      <p className="font-mono text-[0.65rem] text-muted-foreground">
+                        Duplicate citations collapse into the source beneath them
+                      </p>
+                    </div>
+                  </div>
+                  <span className="font-mono text-xs text-signal">
+                    {evidence.length} records · {independentSources} sources
+                  </span>
+                </div>
+                <div className="mt-1">
+                  {evidence.map((item) => (
+                    <div key={item.id} className="app-evidence-marker">
+                      <div className="flex flex-wrap items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                            <span className="label-mono text-signal">{item.id}</span>
+                            <StatusPill tone={toneFor(item.status)} compact />
+                          </div>
+                          <p className="mt-2 font-medium">{item.claim}</p>
+                          <p className="mt-1 font-mono text-[0.66rem] leading-relaxed text-muted-foreground">
+                            {item.source} · {item.sourceType} · surfaced by {item.agent}
+                          </p>
+                          <p className="mt-1 font-mono text-[0.66rem] text-muted-foreground">
+                            Observed {item.observed}
+                          </p>
+                          {item.note && (
+                            <p
+                              className={`mt-2 font-mono text-[0.66rem] ${item.status === "flagged" ? "text-flag" : "text-muted-foreground"}`}
+                            >
+                              {item.note}
+                            </p>
+                          )}
+                        </div>
+                        <span className="font-mono text-[0.62rem] text-muted-foreground">
+                          SOURCE {independentSources === 1 ? "01" : "CLUSTERED"}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </section>
+
+            {opportunity.contradiction && (
+              <section aria-labelledby="contradictions">
+                <SectionHeading eyebrow="Unresolved edge" title="Disagreement stays visible" />
+                <div className="mt-5">
+                  <ContradictionNote>{opportunity.contradiction}</ContradictionNote>
+                </div>
+              </section>
+            )}
+
+            <section aria-labelledby="timeline">
+              <SectionHeading eyebrow="Movement over time" title="Timeline" />
+              <ol className="app-timeline-line mt-5">
+                {opportunity.timeline.map((entry) => (
+                  <li key={`${entry.period}-${entry.event}`} className="app-timeline-item">
+                    <p className="app-timeline-period">{entry.period}</p>
+                    <p className="app-timeline-event">{entry.event}</p>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          </div>
+
+          <aside className="space-y-8">
+            <section className="surface p-5 sm:p-6" aria-labelledby="agents">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <p className="label-mono text-muted-foreground">Contributing intelligence</p>
+                  <h2 className="mt-2 font-display text-xl">Who surfaced the case</h2>
+                </div>
+                <ShieldCheck className="size-5 text-signal" aria-hidden />
+              </div>
+              <ul className="mt-5 space-y-3">
+                {opportunity.agents.map((agent) => (
+                  <li
+                    key={agent}
+                    className="flex items-center gap-3 border-t border-border pt-3 text-sm"
+                  >
+                    <span className="grid size-6 place-items-center border border-signal text-signal">
+                      <span className="size-1.5 rounded-full bg-signal" aria-hidden />
+                    </span>
+                    <span>{agent}</span>
                   </li>
                 ))}
               </ul>
+              <p className="mt-5 border-t border-border pt-4 font-mono text-[0.65rem] leading-relaxed text-muted-foreground">
+                Agents return claims and evidence. Prime Layer clusters, resolves and scores. Agents
+                never answer the customer directly.
+              </p>
+            </section>
+
+            {opportunity.otherNeeds.length > 0 && (
+              <section className="surface p-5 sm:p-6" aria-labelledby="other-needs">
+                <SectionHeading eyebrow="Same company node" title="Other emerging needs" />
+                <ul className="mt-5">
+                  {opportunity.otherNeeds.map((need) => (
+                    <li key={need.need} className="app-stat-rule first:border-t-0 first:pt-0">
+                      <span className="app-stat-rule-label">{need.need}</span>
+                      <span className="app-stat-rule-value signal">{need.confidence}%</span>
+                    </li>
+                  ))}
+                </ul>
+                <Link
+                  to="/app/demand-graph"
+                  className="mt-5 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-signal hover:text-ink"
+                >
+                  Open in Demand Graph <GitBranch className="size-3.5" aria-hidden />
+                </Link>
+              </section>
+            )}
+
+            <section className="surface-dark p-5 sm:p-6">
+              <p className="label-mono text-signal">Next useful action</p>
+              <h2 className="mt-2 font-display text-xl text-vellum">
+                Compare this case with your supply
+              </h2>
+              <p className="mt-3 text-sm leading-relaxed text-ink-muted">
+                Prime Layer has a supply record that can be checked against this need and its
+                timing.
+              </p>
               <Link
-                to="/app/demand-graph"
-                className="mt-4 inline-block label-mono text-signal hover:underline"
+                to="/app/supply"
+                className="mt-5 inline-flex items-center gap-2 font-mono text-xs uppercase tracking-[0.1em] text-signal hover:text-vellum"
               >
-                Open in Demand Graph
+                Review supply records <ArrowUpRight className="size-3.5" aria-hidden />
               </Link>
             </section>
-          )}
-        </aside>
+          </aside>
+        </div>
       </div>
     </div>
   );

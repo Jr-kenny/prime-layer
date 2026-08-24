@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight, Coins, Scale, TrendingUp } from "lucide-react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { MetricBlock, SectionHeading } from "@/components/app/AppUI";
-import { CONTRIBUTIONS, type ContributionTier } from "@/lib/demo-data";
+import { listContributionsLive, type ContributionTier } from "@/lib/orchestrator/workspace";
 
 export const Route = createFileRoute("/app/contributions")({
   head: () => ({
@@ -84,12 +85,30 @@ function tierPill(tier: ContributionTier) {
   );
 }
 
-function weightOf(contribution: (typeof CONTRIBUTIONS)[number]) {
-  return Object.values(contribution.dims).reduce((product, value) => product * value, 1);
+function weightOf(contribution: { weight: number; dims: Record<string, number> }) {
+  return contribution.weight;
 }
 
 function Contributions() {
-  const topAgent = [...CONTRIBUTIONS].sort((a, b) => weightOf(b) - weightOf(a))[0]!;
+  const [contributions, setContributions] = useState<
+    | {
+        id: string;
+        agent: string;
+        claim: string;
+        tier: ContributionTier;
+        weight: number;
+        dims: Record<string, number>;
+        inquiry: string;
+      }[]
+    | null
+  >(null);
+
+  useEffect(() => {
+    void listContributionsLive().then(setContributions);
+  }, []);
+
+  const rows = contributions ?? [];
+  const topAgent = [...rows].sort((a, b) => weightOf(b) - weightOf(a))[0];
 
   return (
     <div>
@@ -102,9 +121,7 @@ function Contributions() {
           <Coins className="size-4 text-signal" aria-hidden />
           <div>
             <p className="label-mono text-muted-foreground">This cycle</p>
-            <p className="mt-1 font-mono text-xs">
-              {CONTRIBUTIONS.length} settlements · USD, onchain
-            </p>
+            <p className="mt-1 font-mono text-xs">{rows.length} settlements · USD, onchain</p>
           </div>
         </div>
       </PageHeader>
@@ -191,7 +208,7 @@ function Contributions() {
         <section className="mt-10" aria-labelledby="ledger">
           <SectionHeading
             eyebrow="Cycle ledger"
-            title={`Settlements graded this cycle · ${CONTRIBUTIONS.length} contributions`}
+            title={`Settlements graded · ${rows.length} contributions`}
             action={
               <Link to="/app/agents" className="app-arrow-link">
                 The agents behind these <ArrowUpRight className="size-3.5" aria-hidden />
@@ -205,7 +222,7 @@ function Contributions() {
               <span>Dimensions</span>
               <span>Weight added</span>
             </div>
-            {CONTRIBUTIONS.map((contribution) => {
+            {rows.map((contribution) => {
               const weight = weightOf(contribution);
               return (
                 <div key={contribution.id} className="app-list-row items-start">
@@ -225,10 +242,14 @@ function Contributions() {
                         <span className="inline-block w-24 text-left">{key}</span>
                         <span
                           className={
-                            value >= 0.8 ? "text-verified" : value >= 0.5 ? "text-ink" : "text-flag"
+                            (value as number) >= 0.8
+                              ? "text-verified"
+                              : (value as number) >= 0.5
+                                ? "text-ink"
+                                : "text-flag"
                           }
                         >
-                          {value.toFixed(2)}
+                          {(value as number).toFixed(2)}
                         </span>
                       </p>
                     ))}
@@ -251,8 +272,8 @@ function Contributions() {
           </div>
           <p className="mt-3 max-w-2xl font-mono text-[0.66rem] leading-relaxed text-muted-foreground">
             Weight is the product of the five graded dimensions. Payout amounts stay between Prime
-            Layer and the agent. Settlements route to the wallet behind each Agentic ID,
-            denominated in USD.
+            Layer and the agent. Settlements route to the wallet behind each Agentic ID, denominated
+            in USD.
           </p>
 
           <div className="surface-dark mt-5 flex flex-wrap items-center justify-between gap-5 p-5">
@@ -260,8 +281,8 @@ function Contributions() {
               <TrendingUp className="size-4 text-signal" aria-hidden />
               <p className="text-sm text-ink-muted">
                 Strongest contributor this cycle:{" "}
-                <span className="text-vellum">{topAgent.agent}</span>, highest independence on the
-                strongest inquiry.
+                <span className="text-vellum">{topAgent?.agent ?? "—"}</span>, highest independence
+                on the strongest inquiry.
               </p>
             </div>
             <Link to="/app/developers" className="app-signal-button">

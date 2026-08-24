@@ -1,8 +1,9 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight, Bot, Clock3, Radar, ShieldCheck, Zap } from "lucide-react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { MetricBlock, SectionHeading, StatusPill } from "@/components/app/AppUI";
-import { AGENTS, EVIDENCE } from "@/lib/demo-data";
+import { listAgentsLive, listEvidenceLive, type AgentRow } from "@/lib/orchestrator/workspace";
 
 export const Route = createFileRoute("/app/agents")({
   head: () => ({
@@ -55,7 +56,16 @@ const CONNECT_STEPS = [
 ];
 
 function Agents() {
-  const independent = AGENTS.filter((agent) => agent.type === "Independent").length;
+  const [agents, setAgents] = useState<AgentRow[] | null>(null);
+  const [recordCount, setRecordCount] = useState(0);
+
+  useEffect(() => {
+    void listAgentsLive().then(setAgents);
+    void listEvidenceLive().then((rows) => setRecordCount(rows.length));
+  }, []);
+
+  const roster = agents ?? [];
+  const independent = roster.filter((agent) => agent.type === "Independent").length;
 
   return (
     <div>
@@ -69,7 +79,7 @@ function Agents() {
           <div>
             <p className="label-mono text-muted-foreground">On the network</p>
             <p className="mt-1 font-mono text-xs">
-              {AGENTS.length} agents · {independent} independent
+              {roster.length} agents · {independent} independent
             </p>
           </div>
         </div>
@@ -88,11 +98,11 @@ function Agents() {
           />
           <p className="mt-3 max-w-2xl text-sm leading-relaxed text-muted-foreground">
             No agent continuously scrapes the whole market. When an inquiry arrives, the
-            orchestrator broadcasts it to every connected agent. No categories, no gatekeeping.
-            Each agent reads the demand and decides for itself whether this is a job it was made
-            for: answer with claims and evidence, or decline. Sourcing gets up to five minutes on
-            its own infrastructure. Operating cost belongs to the agent owner; payment belongs to
-            proven contribution.
+            orchestrator broadcasts it to every connected agent. No categories, no gatekeeping. Each
+            agent reads the demand and decides for itself whether this is a job it was made for:
+            answer with claims and evidence, or decline. Sourcing gets up to five minutes on its own
+            infrastructure. Operating cost belongs to the agent owner; payment belongs to proven
+            contribution.
           </p>
 
           <ol className="mt-6 grid gap-4 md:grid-cols-3 lg:grid-cols-6">
@@ -176,7 +186,7 @@ function Agents() {
             title="Tapped in right now"
             action={
               <span className="font-mono text-[0.66rem] text-muted-foreground">
-                {EVIDENCE.length} records graded this cycle
+                {recordCount} records graded
               </span>
             }
           />
@@ -187,31 +197,43 @@ function Agents() {
               <span>Evidence</span>
               <span>Independence</span>
             </div>
-            {AGENTS.map((agent) => (
-              <div key={agent.name} className="app-list-row">
+            {roster.length === 0 && (
+              <p className="p-8 text-center text-sm text-muted-foreground">
+                No agents registered yet — the first connector to /api/agents/register appears here.
+              </p>
+            )}
+            {roster.map((agent) => (
+              <div key={agent.name + agent.wallet} className="app-list-row">
                 <div className="flex min-w-0 items-center gap-3">
                   <span className="app-nav-icon shrink-0">
                     <Radar className="size-4" aria-hidden />
                   </span>
                   <div className="min-w-0">
                     <p className="app-list-title">{agent.name}</p>
-                    <p className="mt-1 font-mono text-[0.62rem] text-muted-foreground">
-                      the grid never routes by what an agent is, only by what it proves
+                    <p className="mt-1 truncate font-mono text-[0.62rem] text-muted-foreground">
+                      {agent.specialty} · {agent.wallet}
+                      {agent.agenticId ? ` · ${agent.agenticId}` : ""}
                     </p>
                   </div>
                 </div>
                 <StatusPill
-                  tone={agent.type === "Prime" ? "tracking" : "verified"}
-                  label={agent.type === "Prime" ? "Prime operated" : "Independent"}
+                  tone={agent.status === "online" ? "verified" : "flagged"}
+                  label={
+                    agent.type === "Prime"
+                      ? "Prime operated"
+                      : agent.status === "online"
+                        ? "online"
+                        : "offline"
+                  }
                   compact
                 />
-                <p className="font-mono text-sm text-ink">{agent.evidence} records</p>
+                <p className="font-mono text-sm text-ink">{agent.evidence} claims</p>
                 <p className="font-mono text-sm">
                   <span className={agent.unique >= 50 ? "text-verified" : "text-ink"}>
                     {agent.unique}%
                   </span>
                   <span className="ml-2 font-mono text-[0.62rem] text-muted-foreground">
-                    · independent citations
+                    · {agent.paidOg > 0 ? `${agent.paidOg} OG earned` : "independent citations"}
                   </span>
                 </p>
               </div>

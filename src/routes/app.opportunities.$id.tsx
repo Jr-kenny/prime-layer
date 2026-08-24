@@ -1,5 +1,6 @@
-import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowLeft, ArrowUpRight, FileCheck2, GitBranch, ShieldCheck } from "lucide-react";
+import { useEffect, useState } from "react";
 import {
   ContradictionNote,
   ConfidenceValue,
@@ -9,30 +10,19 @@ import {
   StatusPill,
   type StatusTone,
 } from "@/components/app/AppUI";
-import { evidenceById, opportunityById } from "@/lib/demo-data";
+import {
+  getOpportunityLive,
+  type EvidenceItem,
+  type OpportunityView,
+} from "@/lib/orchestrator/workspace";
 
 export const Route = createFileRoute("/app/opportunities/$id")({
-  loader: ({ params }) => {
-    const opportunity = opportunityById(params.id);
-    if (!opportunity) throw notFound();
-    return { opportunity };
-  },
-  head: ({ loaderData }) => {
-    if (!loaderData) {
-      return {
-        meta: [{ title: "Opportunity unavailable" }, { name: "robots", content: "noindex" }],
-      };
-    }
-    const opportunity = loaderData.opportunity;
-    const title = `${opportunity.company} · ${opportunity.need} · Prime Layer`;
-    return {
-      meta: [
-        { title },
-        { name: "description", content: opportunity.summary },
-        { name: "robots", content: "noindex" },
-      ],
-    };
-  },
+  head: () => ({
+    meta: [
+      { title: "Opportunity · Prime Layer workspace" },
+      { name: "robots", content: "noindex" },
+    ],
+  }),
   notFoundComponent: OpportunityNotFound,
   component: OpportunityDetail,
 });
@@ -58,10 +48,33 @@ function OpportunityNotFound() {
 }
 
 function OpportunityDetail() {
-  const { opportunity } = Route.useLoaderData();
-  const evidence = opportunity.evidenceIds
-    .map(evidenceById)
-    .filter((item): item is NonNullable<typeof item> => Boolean(item));
+  const { id } = Route.useParams();
+  const [data, setData] = useState<(OpportunityView & { evidence: EvidenceItem[] }) | null>(null);
+  const [missing, setMissing] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getOpportunityLive({ data: { id } }).then((row) => {
+      if (cancelled) return;
+      if (row) setData(row);
+      else setMissing(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [id]);
+
+  if (missing) return <OpportunityNotFound />;
+  if (!data) {
+    return (
+      <div className="app-content">
+        <p className="font-mono text-xs text-muted-foreground">Loading dossier…</p>
+      </div>
+    );
+  }
+
+  const opportunity = data;
+  const evidence = opportunity.evidence;
   const independentSources = new Set(evidence.map((item) => item.source)).size;
   const tone = toneFor(opportunity.status);
 

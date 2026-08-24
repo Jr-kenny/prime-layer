@@ -1,10 +1,10 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ChevronDown, FileSearch, Layers3, Link2, LoaderCircle, ShieldCheck } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { SectionHeading, StatusPill, type StatusTone } from "@/components/app/AppUI";
 import { anchorToZeroG } from "@/lib/0g/anchor-server-fn";
-import { EVIDENCE, statusLabel, type EvidenceItem } from "@/lib/demo-data";
+import { listEvidenceLive, statusLabel, type EvidenceItem } from "@/lib/orchestrator/workspace";
 
 export const Route = createFileRoute("/app/evidence")({
   head: () => ({
@@ -21,8 +21,6 @@ export const Route = createFileRoute("/app/evidence")({
   component: EvidencePage,
 });
 
-const COMPANIES = ["All companies", ...Array.from(new Set(EVIDENCE.map((item) => item.company)))];
-const AGENTS = ["All agents", ...Array.from(new Set(EVIDENCE.map((item) => item.agent)))];
 const STATUSES = ["All", "Verified", "Contradicted", "Tracking"] as const;
 
 function toneFor(status: "verified" | "flagged" | "open"): StatusTone {
@@ -32,16 +30,40 @@ function toneFor(status: "verified" | "flagged" | "open"): StatusTone {
 }
 
 function EvidencePage() {
-  const [company, setCompany] = useState(COMPANIES[0]!);
-  const [agent, setAgent] = useState(AGENTS[0]!);
+  const [all, setAll] = useState<EvidenceItem[] | null>(null);
+  const [company, setCompany] = useState("All companies");
+  const [agent, setAgent] = useState("All agents");
   const [status, setStatus] = useState<(typeof STATUSES)[number]>("All");
   const [expanded, setExpanded] = useState<string | null>(null);
 
-  const rows = EVIDENCE.filter(
-    (item) =>
-      (company === COMPANIES[0] || item.company === company) &&
-      (agent === AGENTS[0] || item.agent === agent) &&
-      (status === "All" || statusLabel[item.status] === status.toUpperCase()),
+  useEffect(() => {
+    void listEvidenceLive().then(setAll);
+  }, []);
+
+  const rows = useMemo(
+    () =>
+      (all ?? []).filter(
+        (item) =>
+          (company === "All companies" || item.company === company) &&
+          (agent === "All agents" || item.agent === agent) &&
+          (status === "All" ||
+            item.status ===
+              (status === "Verified"
+                ? "verified"
+                : status === "Contradicted"
+                  ? "flagged"
+                  : "open")),
+      ),
+    [all, company, agent, status],
+  );
+
+  const COMPANIES = useMemo(
+    () => ["All companies", ...Array.from(new Set((all ?? []).map((item) => item.company)))],
+    [all],
+  );
+  const AGENTS_LIST = useMemo(
+    () => ["All agents", ...Array.from(new Set((all ?? []).map((item) => item.agent)))],
+    [all],
   );
   const sources = new Set(rows.map((item) => item.source)).size;
   const contradictions = rows.filter((item) => item.status === "flagged").length;
@@ -97,7 +119,7 @@ function EvidencePage() {
                   onChange={(event) => setAgent(event.target.value)}
                   className="app-select mt-2"
                 >
-                  {AGENTS.map((item) => (
+                  {AGENTS_LIST.map((item) => (
                     <option key={item}>{item}</option>
                   ))}
                 </select>

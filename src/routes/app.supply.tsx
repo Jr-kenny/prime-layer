@@ -1,9 +1,10 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowUpRight, Boxes, CheckCircle2, Plus, X } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { MetricBlock, SectionHeading } from "@/components/app/AppUI";
-import { SUPPLY, type SupplyRecord } from "@/lib/demo-data";
+import { listSupplyLive, type SupplyView } from "@/lib/orchestrator/workspace";
+import { addSupplyRecord } from "@/lib/orchestrator/fns";
 import { RequireAuth, RequireAuthAction } from "@/components/app/auth-gate";
 
 export const Route = createFileRoute("/app/supply")({
@@ -22,32 +23,40 @@ export const Route = createFileRoute("/app/supply")({
 });
 
 function Supply() {
-  const [records, setRecords] = useState<SupplyRecord[]>(SUPPLY);
+  const [records, setRecords] = useState<SupplyView[] | null>(null);
+  const [saving, setSaving] = useState(false);
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState("");
   const [market, setMarket] = useState("Nigeria");
   const [target, setTarget] = useState("Hospitality");
   const [capacity, setCapacity] = useState("");
 
-  function addRecord(event: React.FormEvent) {
+  useEffect(() => {
+    void listSupplyLive().then(setRecords);
+  }, []);
+
+  async function addRecord(event: React.FormEvent) {
     event.preventDefault();
-    if (!name.trim() || !capacity.trim()) return;
-    setRecords((current) => [
-      ...current,
-      {
-        id: `supply-${current.length + 1}`,
-        name: name.trim(),
-        detail: [{ label: "Capacity", value: capacity.trim() }],
-        markets: [market],
-        targets: [target],
-        matches: 0,
-        highConfidence: 0,
-      },
-    ]);
-    setName("");
-    setCapacity("");
-    setAdding(false);
+    if (!name.trim() || !capacity.trim() || saving) return;
+    setSaving(true);
+    try {
+      await addSupplyRecord({
+        data: {
+          name: `${name.trim()} (${capacity.trim()})`,
+          markets: [market],
+          targets: [target.trim()],
+        },
+      });
+      setName("");
+      setCapacity("");
+      setAdding(false);
+      setRecords(await listSupplyLive());
+    } finally {
+      setSaving(false);
+    }
   }
+
+  const view = records ?? [];
 
   return (
     <div>
@@ -134,8 +143,7 @@ function Supply() {
                     Save to workspace <ArrowUpRight className="size-3.5" aria-hidden />
                   </button>
                   <p className="mt-3 font-mono text-[0.64rem] text-ink-muted">
-                    This demo saves the record for the current session. A production connection
-                    would persist it to your workspace.
+                    Saved to your workspace and matched against live demand on the graph.
                   </p>
                 </div>
               </form>
@@ -153,12 +161,23 @@ function Supply() {
           </div>
           <div className="flex items-center gap-2 text-muted-foreground">
             <CheckCircle2 className="size-4 text-verified" aria-hidden />
-            <span className="font-mono text-xs">{records.length} records active</span>
+            <span className="font-mono text-xs">{view.length} records active</span>
           </div>
         </div>
 
         <ul className="mt-6 grid gap-4 lg:grid-cols-2">
-          {records.map((record, index) => (
+          {records === null && (
+            <li className="surface p-8 text-center text-sm text-muted-foreground">
+              Loading supply records…
+            </li>
+          )}
+          {records !== null && view.length === 0 && (
+            <li className="surface p-8 text-center text-sm text-muted-foreground">
+              No supply records yet — add what you sell and Prime Layer matches new demand against
+              it.
+            </li>
+          )}
+          {view.map((record, index) => (
             <li
               key={record.id}
               className={`surface overflow-hidden ${index === 0 ? "border-signal/50" : ""}`}

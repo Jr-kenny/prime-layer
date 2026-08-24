@@ -1,9 +1,16 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ArrowDown, ArrowUpRight, Building2, CircleHelp, Network } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { SectionHeading } from "@/components/app/AppUI";
-import { EVIDENCE, OPPORTUNITIES, SUPPLY } from "@/lib/demo-data";
+import {
+  listEvidenceLive,
+  listOpportunitiesLive,
+  listSupplyLive,
+  type EvidenceItem,
+  type OpportunityView,
+  type SupplyView,
+} from "@/lib/orchestrator/workspace";
 
 export const Route = createFileRoute("/app/demand-graph")({
   head: () => ({
@@ -24,8 +31,6 @@ type Selection =
   | { kind: "company" }
   | { kind: "event"; value: string }
   | { kind: "need"; value: string; confidence: number };
-
-const COMPANIES = ["ABC Manufacturing", "Marlowe Bay Hotels", "Meridian Fintech"] as const;
 
 const EVENT_MEANING: Record<string, string> = {
   "Opened new factory":
@@ -52,14 +57,32 @@ const EVENT_MEANING: Record<string, string> = {
 };
 
 function DemandGraph() {
-  const [company, setCompany] = useState<string>(COMPANIES[0]);
+  const [opps, setOpps] = useState<OpportunityView[] | null>(null);
+  const [evidence, setEvidence] = useState<EvidenceItem[]>([]);
+  const [supply, setSupply] = useState<SupplyView[]>([]);
+  const [company, setCompany] = useState<string>("");
   const [selection, setSelection] = useState<Selection>({ kind: "company" });
-  const opportunity = OPPORTUNITIES.find((item) => item.company === company);
-  const events = opportunity?.events ?? [];
-  const needs = opportunity
-    ? [{ need: opportunity.need, confidence: opportunity.confidence }, ...opportunity.otherNeeds]
-    : [];
-  const companyEvidence = EVIDENCE.filter((item) => item.company === company);
+
+  useEffect(() => {
+    void listOpportunitiesLive().then((rows) => {
+      setOpps(rows);
+      if (rows.length > 0) setCompany((current) => current || rows[0]!.company);
+    });
+    void listEvidenceLive().then(setEvidence);
+    void listSupplyLive().then(setSupply);
+  }, []);
+
+  const companies = useMemo(
+    () => Array.from(new Set([...(opps ?? []).map((o) => o.company)])),
+    [opps],
+  );
+  const opportunity = (opps ?? []).find((item) => item.company === company);
+  const events = evidence
+    .filter((item) => item.company === company)
+    .slice(0, 4)
+    .map((item) => item.claim.slice(0, 80));
+  const needs = opportunity ? [{ need: opportunity.need, confidence: opportunity.confidence }] : [];
+  const companyEvidence = evidence.filter((item) => item.company === company);
 
   function selectCompany(nextCompany: string) {
     setCompany(nextCompany);
@@ -84,7 +107,7 @@ function DemandGraph() {
 
       <div className="app-content">
         <div className="flex flex-wrap gap-2" role="tablist" aria-label="Company nodes">
-          {COMPANIES.map((item) => (
+          {companies.map((item) => (
             <button
               key={item}
               type="button"
@@ -263,7 +286,7 @@ function DemandGraph() {
                   Matching supply on record
                 </p>
                 <ul className="mt-3 space-y-2">
-                  {SUPPLY.map((record) => (
+                  {supply.map((record) => (
                     <li key={record.id} className="app-stat-rule first:border-t-0 first:pt-0">
                       <span className="app-stat-rule-label">{record.name}</span>
                       <span className="app-stat-rule-value signal">

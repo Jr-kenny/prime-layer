@@ -477,8 +477,6 @@ export async function gradeAndSynthesize(inquiryId: string) {
       )
         .then(async (result) => {
           for (const a of result.attempted) {
-            const line = settlementLines.find((l) => l.wallet === a.wallet);
-            if (!line) continue;
             await db
               .update(settlements)
               .set(
@@ -486,7 +484,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
                   ? { paidOg: Number(a.amountOg), payoutTx: a.txHash, payoutError: null }
                   : { payoutError: a.error ?? "unknown payout failure" },
               )
-              .where(eq(settlements.id, insertedRowIds[settlementLines.indexOf(line)]!));
+              .where(inArray(settlements.id, a.rowIds));
           }
           const skippedNote = result.skipped.length ? ` (${result.skipped.length} skipped)` : "";
           console.log(

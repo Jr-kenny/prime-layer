@@ -6,16 +6,21 @@ import { zeroGConfig } from "./config";
  * already funded for storage gas) straight to each contributing agent's
  * wallet — pull-free, set-and-forget.
  *
+ * Lines are AGGREGATED PER WALLET before paying: an agent contributing five
+ * claims to one cycle receives ONE transfer sized on its combined weight.
+ * Per-claim transfers both fragment into dust and collide on the signer's
+ * nonce ("replacement fee too low").
+ *
  * Guards (all env-tunable):
- *   - PRIME_PAYOUT_BUDGET_OG     per-cycle payout budget (default 0.5 OG)
- *   - PRIME_MIN_PAYOUT_OG        skip shares smaller than this (dust guard,
- *                                default 0.001 OG) — unpaid rows stay pending
+ *   - PRIME_PAYOUT_BUDGET_OG     per-cycle payout budget (default 0.001 OG)
+ *   - PRIME_MIN_PAYOUT_OG        skip wallets smaller than this (dust guard,
+ *                                default 0.0001 OG) — unpaid rows stay pending
  *                                and scripts/retry-payouts.ts sweeps later
  *   - PRIME_GAS_RESERVE_OG       never spend the signer below this (gas headroom)
  *   - ZERO_G_PAY_DISABLED=true   kill-switch, rows stay pending
  *
  * Placeholder wallets (sample agents) and the platform's own address never
- * receive anything. A failed transfer marks the row with an error and keeps
+ * receive anything. A failed transfer marks its rows with an error and keeps
  * going — one bad wallet can never stall a cycle's payroll.
  */
 
@@ -35,8 +40,8 @@ export function payoutConfig(): PayoutConfig {
   const { privateKey } = zeroGConfig();
   return {
     live: Boolean(privateKey) && !disabled,
-    budgetOg: num("PRIME_PAYOUT_BUDGET_OG", 0.5),
-    minPayoutOg: num("PRIME_MIN_PAYOUT_OG", 0.001),
+    budgetOg: num("PRIME_PAYOUT_BUDGET_OG", 0.001),
+    minPayoutOg: num("PRIME_MIN_PAYOUT_OG", 0.0001),
     gasReserveOg: num("PRIME_GAS_RESERVE_OG", 0.05),
   };
 }
@@ -51,15 +56,24 @@ export function isPlaceholderWallet(wallet: string): boolean {
 }
 
 export type PayableLine = {
-  /** settlements.id — the row to stamp with tx / error. */
+  /** settlements.id — the row(s) to stamp with tx / error. */
   rowId: number;
   agentId: string;
   wallet: string;
   weight: number;
 };
 
+export type WalletAttempt = {
+  wallet: string;
+  amountOg: string;
+  /** Every settlement row this aggregated payout covers. */
+  rowIds: number[];
+  txHash?: string;
+  error?: string;
+};
+
 export type SettleResult = {
-  attempted: { wallet: string; amountOg: string; txHash?: string; error?: string }[];
+  attempted: WalletAttempt[];
   skipped: { wallet: string; reason: string }[];
   totalPaidOg: number;
 };
@@ -75,9 +89,8 @@ function enqueuePay<T>(task: () => Promise<T>): Promise<T> {
 const round6 = (n: number) => Math.round(n * 1e6) / 1e6;
 
 /**
- * Pays one cycle's lines, weight-proportional out of the budget.
- * Row updates are the caller's concern ONLY via the returned results —
- * this module is pure money movement + reporting.
+ * Pays one cycle's lines, weight-proportional out of the budget, one transfer
+ * per wallet. Row stamping is the caller's job via the returned rowIds.
  */
 export async function settleCycle(
   lines: PayableLine[],
@@ -97,30 +110,37 @@ export async function settleCycle(
     const signer = new ethers.Wallet(privateKey!, provider);
     const selfAddress = (await signer.getAddress()).toLowerCase();
 
-    // Eligibility: real wallets, not us, above dust after proportional sizing.
-    const budgetWei = ethers.parseEther(String(opts?.budgetOgOverride ?? config.budgetOg));
-    const eligible = lines.filter((l) => {
+    // Aggregate lines per wallet — one payout per agent per cycle.
+    const byWallet = new Map<string, { rowIds: number[]; weight: number }>();
+    for (const l of lines) {
       if (isPlaceholderWallet(l.wallet)) {
         result.skipped.push({ wallet: l.wallet, reason: "placeholder wallet" });
-        return false;
+        continue;
       }
       if (l.wallet.toLowerCase() === selfAddress) {
         result.skipped.push({ wallet: l.wallet, reason: "platform's own signer" });
-        return false;
+        continue;
       }
-      return true;
-    });
-    const totalWeight = eligible.reduce((s, l) => s + Math.max(l.weight, 0), 0);
+      const entry = byWallet.get(l.wallet) ?? { rowIds: [], weight: 0 };
+      entry.rowIds.push(l.rowId);
+      entry.weight += Math.max(l.weight, 0);
+      byWallet.set(l.wallet, entry);
+    }
+
+    const totalWeight = Array.from(byWallet.values()).reduce((s, e) => s + e.weight, 0);
     if (totalWeight <= 0) {
-      for (const l of eligible) result.skipped.push({ wallet: l.wallet, reason: "zero weight" });
+      for (const [wallet] of byWallet) result.skipped.push({ wallet, reason: "zero weight" });
       return result;
     }
 
-    const sized = eligible.map((l) => ({
-      ...l,
+    const budgetWei = ethers.parseEther(String(opts?.budgetOgOverride ?? config.budgetOg));
+    const SCALE = 1_000_000n; // weight precision
+    const sized = Array.from(byWallet.entries()).map(([wallet, entry]) => ({
+      wallet,
+      rowIds: entry.rowIds,
       amountOg: Number(
         ethers.formatEther(
-          (budgetWei * BigInt(Math.round(Math.max(l.weight, 0) * 1e6))) /
+          (budgetWei * BigInt(Math.round(entry.weight * 1e6))) /
             BigInt(Math.round(totalWeight * 1e6)),
         ),
       ),
@@ -144,7 +164,7 @@ export async function settleCycle(
     }
     const plannedTotal = sized.reduce((s, l) => s + l.amountOg, 0);
     if (spendable < plannedTotal) {
-      // Scale every share down proportionally to what we can afford.
+      // Scale every wallet's share down proportionally to what we can afford.
       for (const l of sized) l.amountOg = round6(l.amountOg * (spendable / plannedTotal));
     }
 
@@ -165,6 +185,7 @@ export async function settleCycle(
         result.attempted.push({
           wallet: l.wallet,
           amountOg: l.amountOg.toFixed(6),
+          rowIds: l.rowIds,
           txHash: tx.hash,
         });
         result.totalPaidOg += l.amountOg;
@@ -172,6 +193,7 @@ export async function settleCycle(
         result.attempted.push({
           wallet: l.wallet,
           amountOg: l.amountOg.toFixed(6),
+          rowIds: l.rowIds,
           error: err instanceof Error ? err.message.slice(0, 200) : "transfer failed",
         });
       }

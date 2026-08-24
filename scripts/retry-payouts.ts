@@ -12,7 +12,7 @@
  */
 import { db, ensureSchema } from "../src/lib/db";
 import { settlements } from "../src/lib/db/schema";
-import { isNull, and, eq } from "drizzle-orm";
+import { isNull, and, eq, inArray } from "drizzle-orm";
 import { payoutConfig, settleCycle, type PayableLine } from "../src/lib/0g/payouts";
 
 await ensureSchema();
@@ -29,7 +29,8 @@ const pending = await db
   .select()
   .from(settlements)
   .where(and(isNull(settlements.paidOg), isNull(settlements.payoutTx)));
-const retryable = pending.filter((r) => !r.payoutError || r.payoutError.length < 200);
+// payout_error is diagnostic, not disqualifying — failed rows are the point.
+const retryable = pending;
 console.log(`${pending.length} pending payout rows, ${retryable.length} retryable`);
 
 if (retryable.length === 0 || dry) {
@@ -60,21 +61,21 @@ for (const [inquiryId, rows] of byInquiry) {
   }));
   const result = await settleCycle(lines, { budgetOgOverride: budgetOg });
   for (const a of result.attempted) {
-    const row = rows.find((r) => r.wallet === a.wallet);
-    if (!row) continue;
     if (a.txHash) {
       await db
         .update(settlements)
         .set({ paidOg: Number(a.amountOg), payoutTx: a.txHash, payoutError: null })
-        .where(eq(settlements.id, row.id));
-      console.log(`✓ ${row.agentId} ${a.amountOg} OG → ${a.txHash.slice(0, 18)}…`);
+        .where(inArray(settlements.id, a.rowIds));
+      console.log(
+        `✓ ${a.wallet} ${a.amountOg} OG (${a.rowIds.length} rows) → ${a.txHash.slice(0, 18)}…`,
+      );
       totalPaid += Number(a.amountOg);
     } else {
       await db
         .update(settlements)
         .set({ payoutError: a.error ?? "unknown payout failure" })
-        .where(eq(settlements.id, row.id));
-      console.error(`✗ ${row.agentId}: ${a.error}`);
+        .where(inArray(settlements.id, a.rowIds));
+      console.error(`✗ ${a.wallet}: ${a.error}`);
     }
   }
   for (const s of result.skipped) {

@@ -118,7 +118,7 @@ function Intelligence() {
           <RequireAuth>
             <form onSubmit={run} className="app-query-box mt-9">
               <label htmlFor="intent" className="label-mono text-ink-muted">
-                Natural-language request
+                Please put in your request
               </label>
               <textarea
                 id="intent"
@@ -153,25 +153,6 @@ function Intelligence() {
               </button>
             ))}
           </div>
-
-          <dl className="app-kpi-strip mt-10">
-            <div className="app-kpi">
-              <dt className="app-kpi-value">{agents.length}</dt>
-              <dd className="app-kpi-label">agents on the grid</dd>
-            </div>
-            <div className="app-kpi">
-              <dt className="app-kpi-value">{supply.length}</dt>
-              <dd className="app-kpi-label">supply records on file</dd>
-            </div>
-            <div className="app-kpi">
-              <dt className="app-kpi-value">{inquiry?.sourcesClustered ?? 0}</dt>
-              <dd className="app-kpi-label">sources clustered this run</dd>
-            </div>
-            <div className="app-kpi">
-              <dt className="app-kpi-value">{inquiry?.claimsReceived ?? 0}</dt>
-              <dd className="app-kpi-label">claims this run</dd>
-            </div>
-          </dl>
         </div>
       </section>
 
@@ -206,9 +187,9 @@ function Intelligence() {
               <div className="mt-8 border-t border-border pt-5">
                 <p className="label-mono text-muted-foreground">How your request is handled</p>
                 <p className="mt-2 max-w-2xl text-sm leading-relaxed">
-                  You never talk to the agents directly. They bring us what they find, we sort out
-                  the overlaps, keep any disagreements visible, and hand you one clear answer with
-                  its receipts.
+                  Prime Layer researches your request through specialist agents on our intelligence
+                  layer, verifies what they bring back, and returns companies worth your attention —
+                  each with the evidence behind it.
                 </p>
               </div>
             </section>
@@ -273,8 +254,7 @@ function Intelligence() {
                 })}
               </ol>
               <p className="mt-7 border-t border-ink-border pt-4 font-mono text-[0.66rem] leading-relaxed text-ink-muted">
-                Duplicate citations do not raise confidence. Contradictions remain attached to the
-                case they affect.
+                One readout. Every claim carries its source.
               </p>
             </section>
 

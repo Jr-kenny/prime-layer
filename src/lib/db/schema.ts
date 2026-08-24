@@ -75,7 +75,9 @@ export const opportunities = sqliteTable("opportunities", {
   size: text("size"),
   evidenceIdsJson: text("evidence_ids_json").notNull().default("[]"),
   inquiryId: text("inquiry_id").notNull(),
-  createdAt: text("created_at").notNull(),
+  anchorRoot: text("anchor_root"),
+  anchorTx: text("anchor_tx"),
+  createdAt: text("created_at"),
 });
 
 export const evidenceRecords = sqliteTable("evidence_records", {

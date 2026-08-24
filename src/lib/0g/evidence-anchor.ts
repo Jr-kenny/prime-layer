@@ -7,7 +7,7 @@ import { zeroGConfig, explorerLink } from "./config";
  * shape; the merkle root becomes its permanent content identifier.
  */
 export type AnchorableRecord = {
-  kind: "evidence" | "prediction" | "settlement";
+  kind: "evidence" | "prediction" | "settlement" | "opportunity";
   id: string;
   agent: string;
   claim: string;

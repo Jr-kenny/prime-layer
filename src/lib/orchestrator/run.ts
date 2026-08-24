@@ -196,6 +196,40 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
   }
 }
 
+/**
+ * Anchors one demand-graph opportunity to 0G Storage (fire-and-forget) and
+ * stamps the merkle root / tx back onto its row. The dossier's permanent copy.
+ */
+function anchorOpportunity(opportunityId: string) {
+  void (async () => {
+    const [row] = await db.select().from(opportunities).where(eq(opportunities.id, opportunityId));
+    if (!row) return;
+    const result = await anchorRecord({
+      kind: "opportunity",
+      id: row.id,
+      agent: "prime-orchestrator",
+      claim: `${row.company}: ${row.need} @ ${Math.round(row.confidence)}% (${row.status})`,
+      confidence: row.confidence,
+      evidence: [
+        {
+          item: row.summary,
+          source: `prime-layer://opportunity/${row.id}`,
+          observed: nowIso().slice(0, 10),
+        },
+      ],
+      ...(row.inquiryId ? { inquiry: row.inquiryId } : {}),
+      observedAt: nowIso().slice(0, 10),
+    });
+    await db
+      .update(opportunities)
+      .set({
+        anchorRoot: result.rootHash,
+        ...(result.txHash ? { anchorTx: result.txHash } : {}),
+      })
+      .where(eq(opportunities.id, opportunityId));
+  })().catch((err) => console.error(`opportunity anchor failed (${opportunityId}):`, err));
+}
+
 export async function gradeAndSynthesize(inquiryId: string) {
   await ensureSchema();
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
@@ -392,7 +426,8 @@ export async function gradeAndSynthesize(inquiryId: string) {
 
   // Upsert opportunities so dossiers resolve for real companies. One living
   // record per company: later cycles refresh confidence, need and status
-  // instead of piling up duplicate rows.
+  // instead of piling up duplicate rows. Every write is anchored to 0G
+  // Storage — the demand graph survives the database.
   for (const entry of readout) {
     const existing = await db
       .select()
@@ -413,11 +448,13 @@ export async function gradeAndSynthesize(inquiryId: string) {
           inquiryId,
         })
         .where(eq(opportunities.id, row.id));
+      void anchorOpportunity(row.id);
       continue;
     }
 
+    const oppId = newId("OPP");
     await db.insert(opportunities).values({
-      id: newId("OPP"),
+      id: oppId,
       company: entry.company,
       need: entry.topClaim,
       summary: entry.topClaim,
@@ -427,6 +464,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
       evidenceIdsJson: JSON.stringify([]),
       createdAt: nowIso(),
     });
+    void anchorOpportunity(oppId);
   }
 
   // Record settlement lines from weights (amounts stay private to the agent),

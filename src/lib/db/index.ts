@@ -94,6 +94,8 @@ const DDL = [
     size TEXT,
     evidence_ids_json TEXT NOT NULL DEFAULT '[]',
     inquiry_id TEXT NOT NULL,
+    anchor_root TEXT,
+    anchor_tx TEXT,
     created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS evidence_records (
@@ -149,6 +151,8 @@ export async function ensureSchema() {
     "ALTER TABLE inquiries ADD COLUMN grade_cost_og REAL",
     "ALTER TABLE inquiries ADD COLUMN grade_error TEXT",
     "ALTER TABLE inquiries ADD COLUMN synthesis_json TEXT",
+    "ALTER TABLE opportunities ADD COLUMN anchor_root TEXT",
+    "ALTER TABLE opportunities ADD COLUMN anchor_tx TEXT",
     "ALTER TABLE claims ADD COLUMN grade_mode TEXT",
     "ALTER TABLE claims ADD COLUMN llm_note TEXT",
     "ALTER TABLE settlements ADD COLUMN paid_og REAL",

@@ -5,7 +5,7 @@
  *   bun run scripts/smoke-inquiry.ts
  */
 import { db, ensureSchema, nowIso, newId } from "../src/lib/db";
-import { inquiries, evidenceRecords } from "../src/lib/db/schema";
+import { inquiries, evidenceRecords, opportunities } from "../src/lib/db/schema";
 import { runInquiry } from "../src/lib/orchestrator/run";
 import { eq } from "drizzle-orm";
 
@@ -35,15 +35,28 @@ console.log("readout:", row?.readoutJson);
 
 // Give fire-and-forget 0G anchors time to settle before exiting.
 console.log("waiting for 0G anchors…");
-for (let i = 0; i < 50; i++) {
+for (let i = 0; i < 90; i++) {
   await new Promise((r) => setTimeout(r, 2000));
   const ev = await db.select().from(evidenceRecords).where(eq(evidenceRecords.inquiryId, id));
   const [iq] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+  const opps = await db.select().from(opportunities);
+  const oppForCycle = opps.filter((o) => o.inquiryId === id);
   const anchored = ev.filter((e) => e.anchorRoot);
-  if (ev.length > 0 && anchored.length === ev.length && iq?.readoutAnchorRoot) {
+  const oppsAnchored = oppForCycle.filter((o) => o.anchorRoot);
+  if (
+    ev.length > 0 &&
+    anchored.length === ev.length &&
+    iq?.readoutAnchorRoot &&
+    oppForCycle.length > 0 &&
+    oppsAnchored.length === oppForCycle.length
+  ) {
     console.log(
       "evidence anchors:",
       anchored.map((e) => `${e.id} → ${e.anchorRoot!.slice(0, 18)}…`),
+    );
+    console.log(
+      "opportunity anchors:",
+      oppsAnchored.map((o) => `${o.company} → ${o.anchorRoot!.slice(0, 18)}…`),
     );
     console.log(
       "readout anchor:",

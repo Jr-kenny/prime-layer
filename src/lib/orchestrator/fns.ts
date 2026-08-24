@@ -77,6 +77,8 @@ export const listLiveAgents = createServerFn({ method: "POST" }).handler(async (
     wallet: `${a.wallet.slice(0, 6)}…${a.wallet.slice(-4)}`,
     status: a.status,
     reliability: a.reliability,
+    // ERC-7857 identity pointer ("0x7857:<tokenId>") once minted.
+    agenticId: a.agenticId,
     connectedAt: a.createdAt,
   }));
 });

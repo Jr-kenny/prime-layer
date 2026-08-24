@@ -16,13 +16,25 @@ await ensureSchema();
 
 const config = agenticIdConfig();
 if (!config.live) {
-  console.error("Agentic ID not live — set ZERO_G_PRIVATE_KEY (and optionally AGENTIC_ID_CONTRACT).");
+  console.error(
+    "Agentic ID not live — set ZERO_G_PRIVATE_KEY (and optionally AGENTIC_ID_CONTRACT).",
+  );
   process.exit(1);
 }
 console.log("contract:", config.address);
 
 const rows = await db.select().from(agents);
-const pending = rows.filter((a) => !a.agenticId);
+// Placeholder wallets (0x…0001-style sample rows) get no identity — nobody
+// holds that key, the token would be stuck forever.
+const PLACEHOLDER_LIMIT = 1000n;
+const isPlaceholder = (wallet: string) => {
+  try {
+    return BigInt(wallet) < PLACEHOLDER_LIMIT;
+  } catch {
+    return true;
+  }
+};
+const pending = rows.filter((a) => !a.agenticId && !isPlaceholder(a.wallet));
 console.log(`${rows.length} agents total, ${pending.length} without an Agentic ID`);
 
 for (const agent of pending) {

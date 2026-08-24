@@ -2,6 +2,7 @@ import { z } from "zod";
 import { db, ensureSchema, nowIso, newId } from "@/lib/db";
 import { agents, claims, dispatchAcks, inquiries } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
+import { agenticIdConfig, mintAgentIdentity } from "@/lib/0g/agentic-id";
 
 /**
  * Connector protocol — the HTTP surface external agents talk to.
@@ -112,6 +113,24 @@ async function registerAgent(request: Request): Promise<Response> {
     createdAt: nowIso(),
     lastSeen: nowIso(),
   });
+
+  // First-time registration → mint an Agentic ID owned by the agent's wallet.
+  // Fire-and-forget: identity is an enhancement, never a gate. If the mint
+  // fails the agent still participates; a later backfill can retry.
+  if (!agenticId && agenticIdConfig().live) {
+    void mintAgentIdentity({ agentDbId: id, name, specialty, wallet, endpoint })
+      .then(async (minted) => {
+        await db
+          .update(agents)
+          .set({ agenticId: `0x7857:${minted.tokenId}` })
+          .where(eq(agents.id, id));
+        console.log(
+          `agentic-id minted for ${name}: token ${minted.tokenId} → ${minted.explorerUrl}`,
+        );
+      })
+      .catch((err) => console.error(`agentic-id mint deferred for ${name}:`, err.message));
+  }
+
   return json({ agent_id: id, created: true });
 }
 

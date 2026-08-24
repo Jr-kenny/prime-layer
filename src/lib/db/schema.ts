@@ -109,5 +109,8 @@ export const settlements = sqliteTable("settlements", {
   weight: real("weight").notNull(),
   amountUsd: real("amount_usd").notNull(),
   tx: text("tx"),
+  paidOg: real("paid_og"),
+  payoutTx: text("payout_tx"),
+  payoutError: text("payout_error"),
   createdAt: text("created_at").notNull(),
 });

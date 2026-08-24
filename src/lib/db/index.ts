@@ -125,6 +125,9 @@ const DDL = [
     weight REAL NOT NULL,
     amount_usd REAL NOT NULL,
     tx TEXT,
+    paid_og REAL,
+    payout_tx TEXT,
+    payout_error TEXT,
     created_at TEXT NOT NULL
   )`,
 ];
@@ -146,6 +149,9 @@ export async function ensureSchema() {
     "ALTER TABLE inquiries ADD COLUMN grade_error TEXT",
     "ALTER TABLE claims ADD COLUMN grade_mode TEXT",
     "ALTER TABLE claims ADD COLUMN llm_note TEXT",
+    "ALTER TABLE settlements ADD COLUMN paid_og REAL",
+    "ALTER TABLE settlements ADD COLUMN payout_tx TEXT",
+    "ALTER TABLE settlements ADD COLUMN payout_error TEXT",
   ];
   for (const statement of alters) {
     try {

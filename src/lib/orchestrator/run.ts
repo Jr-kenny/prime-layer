@@ -19,6 +19,7 @@ import {
 } from "./grade";
 import { llmGradeClaims } from "./llm-grade";
 import { buildSettlement } from "@/lib/0g/payments";
+import { settleCycle } from "@/lib/0g/payouts";
 import { anchorRecord } from "@/lib/0g/evidence-anchor";
 
 /**
@@ -441,19 +442,59 @@ export async function gradeAndSynthesize(inquiryId: string) {
   const settlementLines: { agentId: string; wallet: string; weight: number; amountUsd: number }[] =
     [];
   if (weightTotal > 0 && poolUsd > 0) {
+    const insertedRowIds: number[] = [];
     for (const g of graded) {
       const wallet = agentRows.find((a) => a.id === g.agentId)?.wallet;
       if (!wallet) continue;
       const amountUsd = Math.round(poolUsd * (g.weight / weightTotal) * 100) / 100;
       settlementLines.push({ agentId: g.agentId, wallet, weight: g.weight, amountUsd });
-      await db.insert(settlements).values({
-        inquiryId,
-        agentId: g.agentId,
-        wallet,
-        weight: g.weight,
-        amountUsd,
-        createdAt: nowIso(),
-      });
+      const [row] = await db
+        .insert(settlements)
+        .values({
+          inquiryId,
+          agentId: g.agentId,
+          wallet,
+          weight: g.weight,
+          amountUsd,
+          createdAt: nowIso(),
+        })
+        .returning({ id: settlements.id });
+      if (row) insertedRowIds.push(row.id);
+    }
+
+    // 0G Pay — real native-token payouts from the platform signer, split by
+    // weight within the per-cycle budget. Fire-and-forget: a slow or failed
+    // payroll never delays the readout; rows keep the state (paid_og /
+    // payout_tx / payout_error) and scripts/retry-payouts.ts sweeps stragglers.
+    if (insertedRowIds.length > 0) {
+      void settleCycle(
+        settlementLines.map((l, i) => ({
+          rowId: insertedRowIds[i]!,
+          agentId: l.agentId,
+          wallet: l.wallet,
+          weight: l.weight,
+        })),
+      )
+        .then(async (result) => {
+          for (const a of result.attempted) {
+            const line = settlementLines.find((l) => l.wallet === a.wallet);
+            if (!line) continue;
+            await db
+              .update(settlements)
+              .set(
+                a.txHash
+                  ? { paidOg: Number(a.amountOg), payoutTx: a.txHash, payoutError: null }
+                  : { payoutError: a.error ?? "unknown payout failure" },
+              )
+              .where(eq(settlements.id, insertedRowIds[settlementLines.indexOf(line)]!));
+          }
+          const skippedNote = result.skipped.length ? ` (${result.skipped.length} skipped)` : "";
+          console.log(
+            `payouts settled for ${inquiryId}: ${result.totalPaidOg.toFixed(6)} OG across ` +
+              `${result.attempted.filter((a) => a.txHash).length} transfers${skippedNote}`,
+          );
+        })
+        .catch((err) => console.error("payout pass failed:", err));
     }
   }
 

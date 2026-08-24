@@ -5,7 +5,12 @@ import { inquiries, agents, supplyRecords } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { runInquiry, SOURCING_WINDOW_SECONDS } from "@/lib/orchestrator/run";
 
-const submitSchema = z.object({ question: z.string().min(8).max(500) });
+const submitSchema = z.object({
+  question: z.string().min(8).max(500),
+  identity: z.string().min(3).max(120).optional(),
+  email: z.string().max(160).optional(),
+  wallet: z.string().max(60).optional(),
+});
 
 export type ReadoutEntry = {
   company: string;
@@ -33,6 +38,15 @@ export const submitInquiry = createServerFn({ method: "POST" })
     await ensureSchema();
     const id = newId("INQ");
     const ts = nowIso();
+
+    // Metering: signed-in businesses spend a free trial run or a credit.
+    // Guest mode (no identity passed) is unmetered so dev keeps working.
+    if (data.identity) {
+      const { consumeRun } = await import("./credits");
+      const spent = await consumeRun(data.identity, id);
+      if (!spent.ok) return spent;
+    }
+
     await db.insert(inquiries).values({
       id,
       question: data.question,
@@ -45,6 +59,10 @@ export const submitInquiry = createServerFn({ method: "POST" })
     void runInquiry(id, `${submitUrl}/api/claims/submit`);
     return { inquiryId: id };
   });
+
+export { getAccount, verifyTopup, pricingPublic } from "./credits";
+export type { TopupResult } from "./credits";
+export { FREE_TRIAL_RUNS, RUN_PRICE_USD } from "./credits";
 
 export type SynthesisSource = { label: string; url: string };
 

@@ -113,6 +113,25 @@ const DDL = [
     inquiry_id TEXT,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS accounts (
+    id TEXT PRIMARY KEY,
+    identity TEXT NOT NULL UNIQUE,
+    email TEXT,
+    wallet TEXT,
+    credits INTEGER NOT NULL DEFAULT 0,
+    free_runs_used INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL,
+    updated_at TEXT
+  )`,
+  `CREATE TABLE IF NOT EXISTS credit_ledger (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    account_id TEXT NOT NULL,
+    delta INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    tx_hash TEXT,
+    inquiry_id TEXT,
+    created_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS dispatch_acks (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     inquiry_id TEXT NOT NULL,

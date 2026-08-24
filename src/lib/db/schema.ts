@@ -104,6 +104,32 @@ export const dispatchAcks = sqliteTable("dispatch_acks", {
   respondedAt: text("responded_at").notNull(),
 });
 
+/**
+ * Workspace accounts (one per signed-in business) and their credit ledger.
+ * Free trial runs are counted, paid credits are consumed per intelligence
+ * run, and every top-up payment is recorded with its on-chain tx hash.
+ */
+export const accounts = sqliteTable("accounts", {
+  id: text("id").primaryKey(),
+  identity: text("identity").notNull().unique(),
+  email: text("email"),
+  wallet: text("wallet"),
+  credits: integer("credits").notNull().default(0),
+  freeRunsUsed: integer("free_runs_used").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at"),
+});
+
+export const creditLedger = sqliteTable("credit_ledger", {
+  id: integer("id").primaryKey({ autoIncrement: true }),
+  accountId: text("account_id").notNull(),
+  delta: integer("delta").notNull(),
+  kind: text("kind").notNull(), // free_run | run | topup
+  txHash: text("tx_hash"),
+  inquiryId: text("inquiry_id"),
+  createdAt: text("created_at").notNull(),
+});
+
 export const settlements = sqliteTable("settlements", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   inquiryId: text("inquiry_id").notNull(),

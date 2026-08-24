@@ -1,6 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowUpRight, Bot, Database, Layers3, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { usePrivy } from "@privy-io/react-auth";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
 import {
@@ -8,7 +9,17 @@ import {
   listLiveAgents,
   listSupplyRecords,
   submitInquiry,
+  getAccount,
+  verifyTopup,
 } from "@/lib/orchestrator/fns";
+
+type AccountView = {
+  id: string;
+  credits: number;
+  freeRunsUsed: number;
+  freeRunsLeft: number;
+  priceUsd: number;
+};
 
 export const Route = createFileRoute("/app/")({
   head: () => ({
@@ -51,12 +62,31 @@ function Intelligence() {
   const [agents, setAgents] = useState<Awaited<ReturnType<typeof listLiveAgents>>>([]);
   const [supply, setSupply] = useState<Awaited<ReturnType<typeof listSupplyRecords>>>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [account, setAccount] = useState<AccountView | null>(null);
+  const [paywall, setPaywall] = useState<{ priceUsd: number; paymentWallet?: string } | null>(null);
+  const [topup, setTopup] = useState<{ state: "idle" | "sent"; txHash: string } | null>(null);
   const pollRef = useRef<number | null>(null);
+  const { ready, authenticated, user } = usePrivy();
+  const identity = user?.email?.address ?? user?.wallet?.address ?? null;
 
   useEffect(() => {
     void listLiveAgents().then(setAgents);
     void listSupplyRecords().then(setSupply);
   }, []);
+
+  useEffect(() => {
+    if (!identity) {
+      setAccount(null);
+      return;
+    }
+    void getAccount({
+      data: {
+        identity,
+        email: user?.email?.address ?? undefined,
+        wallet: user?.wallet?.address ?? undefined,
+      },
+    }).then(setAccount);
+  }, [identity, user?.email?.address, user?.wallet?.address]);
 
   useEffect(
     () => () => {
@@ -88,12 +118,45 @@ function Intelligence() {
 
   async function run(event: React.FormEvent) {
     event.preventDefault();
-    if (submitting) return;
+    if (submitting || phase === "running") return;
     setSubmitting(true);
-    const { inquiryId } = await submitInquiry({ data: { question: query } });
+    setPaywall(null);
+    const result = await submitInquiry({
+      data: {
+        question: query,
+        ...(identity
+          ? {
+              identity,
+              ...(user?.email?.address ? { email: user.email.address } : {}),
+              ...(user?.wallet?.address ? { wallet: user.wallet.address } : {}),
+            }
+          : {}),
+      },
+    });
     setSubmitting(false);
-    setPhase("running");
-    poll(inquiryId);
+    if ("inquiryId" in result && result.inquiryId) {
+      setPhase("running");
+      poll(result.inquiryId);
+    } else if ("reason" in result && result.reason === "out_of_credits") {
+      setPaywall({
+        priceUsd: result.priceUsd,
+        ...(result.paymentWallet ? { paymentWallet: result.paymentWallet } : {}),
+      });
+    }
+  }
+
+  async function verifyPayment() {
+    if (!topup?.txHash || !identity || !paywall) return;
+    setSubmitting(true);
+    const result = await verifyTopup({ data: { identity, txHash: topup.txHash } });
+    setSubmitting(false);
+    if (result.ok) {
+      setAccount(await getAccount({ data: { identity } }));
+      setTopup(null);
+      setPaywall(null);
+    } else {
+      alert(result.error);
+    }
   }
 
   const steps = buildSteps(inquiry, agents.length);
@@ -117,14 +180,27 @@ function Intelligence() {
 
           <RequireAuth>
             <form onSubmit={run} className="app-query-box mt-9">
-              <label htmlFor="intent" className="label-mono text-ink-muted">
-                Please put in your request
-              </label>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <label htmlFor="intent" className="label-mono text-ink-muted">
+                  Please put in your request
+                </label>
+                {account && (
+                  <span className="label-mono text-signal">
+                    {account.freeRunsLeft > 0
+                      ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
+                      : account.credits > 0
+                        ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
+                        : "no runs left"}
+                  </span>
+                )}
+              </div>
               <textarea
                 id="intent"
                 rows={4}
                 value={query}
                 onChange={(event) => setQuery(event.target.value)}
+                readOnly={phase === "running" || submitting}
+                aria-readonly={phase === "running" || submitting}
                 className="mt-3 w-full"
               />
               <div className="app-query-meta">
@@ -134,12 +210,53 @@ function Intelligence() {
                   className="app-signal-button shrink-0"
                   disabled={submitting || phase === "running"}
                 >
-                  {phase === "running" ? "Running readout" : "Run intelligence"}
+                  {submitting || phase === "running" ? "Running readout" : "Run intelligence"}
                   <ArrowUpRight className="size-3.5" aria-hidden />
                 </button>
               </div>
             </form>
           </RequireAuth>
+
+          {paywall && (
+            <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
+              <p className="label-mono text-signal">Out of runs</p>
+              <h3 className="mt-2 font-display text-2xl text-vellum">
+                Fund ${paywall.priceUsd} per intelligence run
+              </h3>
+              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
+                Your free runs are used up. Send ${paywall.priceUsd} in 0G (or any multiple of it)
+                from your wallet to the address below, paste your transaction hash, and your credits
+                land instantly after on-chain verification.
+              </p>
+              {paywall.paymentWallet ? (
+                <>
+                  <p className="mt-4 break-all rounded-sm border border-ink-border bg-ink p-3 font-mono text-xs text-vellum">
+                    {paywall.paymentWallet}
+                  </p>
+                  <div className="mt-4 flex flex-wrap items-center gap-3">
+                    <input
+                      value={topup?.txHash ?? ""}
+                      onChange={(event) => setTopup({ state: "sent", txHash: event.target.value })}
+                      placeholder="Paste your 0G transaction hash"
+                      className="app-input min-w-72 flex-1 border-ink-border bg-slate text-vellum placeholder:text-ink-subtle"
+                    />
+                    <button
+                      type="button"
+                      onClick={verifyPayment}
+                      disabled={submitting || !topup?.txHash}
+                      className="app-signal-button shrink-0 disabled:opacity-60"
+                    >
+                      {submitting ? "Verifying…" : "Verify & add credits"}
+                    </button>
+                  </div>
+                </>
+              ) : (
+                <p className="mt-4 font-mono text-xs text-flag">
+                  Payments are not set up on the server yet (PRIME_PLATFORM_WALLET missing).
+                </p>
+              )}
+            </div>
+          )}
 
           <div className="mt-3 flex flex-wrap gap-2">
             {EXAMPLES.map((example) => (

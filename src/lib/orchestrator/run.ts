@@ -20,6 +20,7 @@ import {
 import { llmGradeClaims } from "./llm-grade";
 import { buildSettlement } from "@/lib/0g/payments";
 import { settleCycle } from "@/lib/0g/payouts";
+import { synthesizeInquiry } from "./synthesize";
 import { anchorRecord } from "@/lib/0g/evidence-anchor";
 
 /**
@@ -533,6 +534,15 @@ export async function gradeAndSynthesize(inquiryId: string) {
       updatedAt: nowIso(),
     })
     .where(eq(inquiries.id, inquiryId));
+
+  // Synthesis — the orchestrator thinks before the client sees anything:
+  // merges the same company into one entry, decides what is actually a
+  // recommendation, writes the readout in the soul's voice with source links.
+  try {
+    await synthesizeInquiry(inquiryId);
+  } catch (err) {
+    console.error("synthesis failed (readout kept):", err);
+  }
 
   // Anchor the cycle snapshot — the public, verifiable record of this run.
   void anchorRecord({

@@ -38,6 +38,7 @@ export const inquiries = sqliteTable("inquiries", {
   gradeMode: text("grade_mode"),
   gradeCostOg: real("grade_cost_og"),
   gradeError: text("grade_error"),
+  synthesisJson: text("synthesis_json"),
   error: text("error"),
   dispatchedAt: text("dispatched_at"),
   windowClosesAt: text("window_closes_at"),

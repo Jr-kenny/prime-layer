@@ -46,6 +46,32 @@ export const submitInquiry = createServerFn({ method: "POST" })
     return { inquiryId: id };
   });
 
+export type SynthesisSource = { label: string; url: string };
+
+export type SynthesisView = {
+  preamble: string;
+  recommendations: {
+    company: string;
+    title: string;
+    body: string;
+    confidence: number;
+    sources: SynthesisSource[];
+  }[];
+};
+
+const synthesisSchema = z.object({
+  preamble: z.string(),
+  recommendations: z.array(
+    z.object({
+      company: z.string(),
+      title: z.string(),
+      body: z.string(),
+      confidence: z.number(),
+      sources: z.array(z.object({ label: z.string(), url: z.string() })),
+    }),
+  ),
+});
+
 export const getInquiry = createServerFn({ method: "POST" })
   .validator((input: unknown) => z.string().min(3).parse(input))
   .handler(async ({ data: id }) => {
@@ -62,6 +88,9 @@ export const getInquiry = createServerFn({ method: "POST" })
       claimsReceived: row.claimsReceived,
       sourcesClustered: row.sourcesClustered,
       readout: row.readoutJson ? readoutSchema.parse(JSON.parse(row.readoutJson)) : null,
+      synthesis: row.synthesisJson
+        ? (synthesisSchema.parse(JSON.parse(row.synthesisJson)) as SynthesisView)
+        : null,
       error: row.error,
       windowSeconds: SOURCING_WINDOW_SECONDS,
     };

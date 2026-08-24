@@ -67,17 +67,21 @@ function Intelligence() {
 
   const poll = useCallback((inquiryId: string) => {
     if (pollRef.current) window.clearInterval(pollRef.current);
+    let ticks = 0;
     pollRef.current = window.setInterval(async () => {
+      ticks += 1;
       const state = await getInquiry({ data: inquiryId });
       if (!state) return;
       setInquiry(state);
-      if (state.status === "complete") {
-        window.clearInterval(pollRef.current!);
-        setPhase("done");
-      }
       if (state.status === "failed") {
         window.clearInterval(pollRef.current!);
         setPhase("failed");
+      }
+      // "complete" alone isn't enough — the synthesis pass writes the actual
+      // readout right after. Keep polling briefly until it lands (or ~40s cap).
+      if (state.status === "complete" && (state.synthesis || ticks > 20)) {
+        window.clearInterval(pollRef.current!);
+        setPhase("done");
       }
     }, 2000);
   }, []);
@@ -94,6 +98,7 @@ function Intelligence() {
 
   const steps = buildSteps(inquiry, agents.length);
   const readout = (inquiry?.readout as ReadoutEntry[] | null) ?? [];
+  const synthesis = inquiry?.synthesis ?? null;
 
   return (
     <div>
@@ -282,37 +287,77 @@ function Intelligence() {
                 {phase === "failed" && <StatusPill tone="flagged" label="Run failed" />}
               </div>
 
-              {phase === "done" && readout.length > 0 ? (
-                <div className="surface mt-5 overflow-hidden">
-                  {readout.map((entry, index) => (
-                    <div key={entry.company} className="app-list-row">
-                      <div className="flex min-w-0 gap-3">
-                        <span className="app-list-index">0{index + 1}</span>
-                        <div className="min-w-0">
-                          <p className="app-list-title">{entry.company}</p>
-                          <p className="mt-2 max-w-xl text-xs leading-relaxed text-muted-foreground">
-                            {entry.topClaim}
-                          </p>
+              {phase === "done" && synthesis && synthesis.recommendations.length > 0 ? (
+                <div className="mt-5 space-y-5">
+                  {synthesis.preamble && (
+                    <p className="max-w-3xl border-l-2 border-signal pl-4 text-sm leading-relaxed text-muted-foreground">
+                      {synthesis.preamble}
+                    </p>
+                  )}
+                  <ol className="space-y-4">
+                    {synthesis.recommendations.map((rec, index) => (
+                      <li key={`${rec.company}-${index}`} className="surface p-5 sm:p-6">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="label-mono text-signal">
+                              {String(index + 1).padStart(2, "0")} · Recommendation
+                            </p>
+                            <h3 className="mt-2 font-display text-2xl leading-tight">
+                              {rec.company}
+                            </h3>
+                            {rec.title && rec.title !== rec.company && (
+                              <p className="mt-1 text-sm font-medium">{rec.title}</p>
+                            )}
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-3xl text-signal">{rec.confidence}%</p>
+                            <p className="label-mono text-muted-foreground">match</p>
+                          </div>
                         </div>
-                      </div>
-                      <div className="app-list-meta">
-                        <p>CLAIMS</p>
-                        <p className="mt-1 text-ink">{entry.claims}</p>
-                        <p className="mt-3">SOURCES</p>
-                        <p className="mt-1 text-ink">{entry.independentSources} independent</p>
-                      </div>
-                      <div className="app-confidence">
-                        <span
-                          className={`app-confidence-value ${entry.confidence >= 80 ? "app-tone-verified" : "app-tone-tracking"}`}
-                        >
-                          {entry.confidence}%
-                        </span>
-                      </div>
-                      <span className="app-list-action">
-                        {entry.contributingAgents.length} agents
-                      </span>
-                    </div>
-                  ))}
+                        <p className="mt-4 max-w-3xl text-sm leading-relaxed">{rec.body}</p>
+                        {rec.sources.length > 0 && (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="label-mono text-muted-foreground">
+                              Sources · read them yourself
+                            </p>
+                            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                              {rec.sources.map((source, sIndex) => (
+                                <li key={`${source.url}-${sIndex}`}>
+                                  <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 font-mono text-xs text-signal hover:text-ink"
+                                  >
+                                    {source.label || "source"}
+                                    <ArrowUpRight className="size-3" aria-hidden />
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </li>
+                    ))}
+                  </ol>
+                </div>
+              ) : phase === "done" && synthesis ? (
+                <div className="surface mt-5 p-8 text-center">
+                  <p className="font-display text-xl">
+                    Honestly — nothing worth recommending came back.
+                  </p>
+                  <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
+                    {synthesis.preamble ||
+                      "We asked everyone on the grid and, honestly, no one had anything solid for you. That usually means there just isn't demand forming right now, not that something broke. Try a different question, or check back soon."}
+                  </p>
+                </div>
+              ) : phase === "done" && readout.length > 0 ? (
+                <div className="surface mt-5 p-8 text-center">
+                  <p className="font-display text-xl">Signals are in — writing your readout…</p>
+                  <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
+                    {readout.length} companies came back from the grid. The orchestrator is merging
+                    duplicates and drafting the recommendation now. This page updates in a moment.
+                  </p>
                 </div>
               ) : phase === "done" ? (
                 <div className="surface mt-5 p-8 text-center">

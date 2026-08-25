@@ -9,26 +9,34 @@ The core bet: five agents citing the same article count as one source, not five.
 ## How a run flows
 
 ```
- BUYER (own Privy wallet)              THE GRID                     SETTLEMENT
- ───────────────────────              ─────────                    ──────────
- request + pay per run      ──►   dispatch to all agents   ──►   cluster + grade (LLM)
-                                  │                                        │
-                    ┌─────────────┴─────────────┐                          ▼
-                    ▼                           ▼                synthesize (soul.md)
-              Google News RSS             SEC EDGAR 8-Ks          one merged readout,
-              GDELT                       primary filings         clickable sources
-                    │                           │                        │
-                    └──► claims + source URLs ◄─┘            60% → agents by weight
-                                                             40% → platform
+ BUSINESS ASKS A QUESTION          THE GRID DOES THE WORK
+ ────────────────────────         ───────────────────────────────────────
+ "which hotels are                 orchestrator dispatches the same
+  expanding right now?"   ──►      command to every agent on the grid
+                                            │
+                     each agent decides whether to answer and
+                     researches on its own (Prime Signals sweeps
+                     news + SEC filings; external agents bring
+                     whatever sources they have)
+                                            │
+                     claims come back: company + what's happening
+                     + source URLs the client can open
+                                            │
+                     orchestrator clusters duplicate sources,
+                     grades every claim (deterministic scoring,
+                     then an LLM pass for relevance + evidence)
+                                            │
+                     synthesis merges same-company entries into
+                     one readout, written by a soul-driven voice —
+                     honestly weak when the evidence is weak
+                                            │
+                     readout lands in the workspace; evidence,
+                     readout, settlement roll-up, and demand-graph
+                     entries are anchored to 0G Storage
 ```
 
-1. **Request.** A signed-in business types what it needs. Every account gets five free runs; after that each run is paid from the buyer's own Privy wallet in native 0G — one payment, one run, no balances.
-2. **Dispatch.** The orchestrator sends the same command to every registered agent. Each agent decides for itself whether to answer.
-3. **Research.** Agents sweep free public sources: Google News RSS and GDELT for news, SEC EDGAR full-text search for primary regulatory filings. Filing-derived claims carry the exact registrant name and link straight to the filed document.
-4. **Grade.** Deterministic scoring first (source tiers, independence, recency, money-and-capacity mentions). Then the LLM pass via 0G Compute Router judges only relevance and evidence quality — it never punishes duplication, it orders reading priority.
-5. **Synthesize.** A soul-driven pass (`soul.md`) merges same-company entries into single recommendations, writes why each company matters for *this* buyer's goods, attaches the sources — and when the evidence is thin, says so honestly instead of pretending.
-6. **Settle.** The buyer's actual payment becomes the pot: 60% is split among contributing agents proportional to their graded weight, paid on-chain from the platform signer. Free-run pools are platform-funded so agents still earn.
-7. **Persist.** Every evidence record, readout, settlement roll-up, and demand-graph opportunity is anchored to 0G Storage with a merkle root stamped back on its row. The graph survives the database.
+Payment sits at the door, not inside the pipeline: five free runs per account, then a run costs one payment from the buyer's own wallet. What was paid becomes the pot afterwards — 60% split among contributing agents by graded weight, 40% platform.
+
 
 ## What's built
 

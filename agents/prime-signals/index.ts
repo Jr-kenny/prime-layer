@@ -129,6 +129,12 @@ type RawSignal = {
   link: string;
   publisherUrl: string | null;
   publishedAt: string; // ISO date (yyyy-mm-dd)
+  /** "filing" = primary regulatory source, outranks news in scoring. */
+  origin: "news" | "filing";
+  /** EDGAR gives us the exact registrant name — skip headline extraction. */
+  companyOverride?: string | null;
+  /** The topic keyword this signal matched (for relevance gating). */
+  topicMatched?: string | null;
 };
 
 async function fetchGoogleNews(query: string): Promise<RawSignal[]> {
@@ -154,7 +160,8 @@ async function fetchGoogleNews(query: string): Promise<RawSignal[]> {
       title,
       link,
       publisherUrl: sourceUrl,
-      publishedAt: toDate(pubDate) ?? new Date().toISOString().slice(0, 10),
+      publishedAt: toDate(pubDate ?? "") ?? new Date().toISOString().slice(0, 10),
+      origin: "news",
     });
   }
   return signals;
@@ -181,7 +188,72 @@ async function fetchGdelt(query: string): Promise<RawSignal[]> {
       publisherUrl: a.domain ? `https://${a.domain}` : null,
       // seendate format: 20260823T091500Z
       publishedAt: toDate(a.seendate ?? "") ?? new Date().toISOString().slice(0, 10),
+      origin: "news" as const,
     }));
+}
+
+/**
+ * SEC EDGAR full-text search — PRIMARY-source signals, free, no key.
+ * Companies disclose expansions, new facilities and material deals in 8-K
+ * filings; these outrank any news story because they come from the company
+ * itself under legal penalty. Requires a descriptive User-Agent per SEC policy.
+ */
+const EDGAR_UA =
+  process.env["EDGAR_USER_AGENT"]?.trim() ||
+  "PrimeLayer-Signals/1.0 (research; contact@prime-layer.example)";
+
+async function fetchEdgar(topics: string[]): Promise<RawSignal[]> {
+  const since = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
+  const today = new Date().toISOString().slice(0, 10);
+  const signals: RawSignal[] = [];
+
+  for (const topic of topics.slice(0, 2)) {
+    const url =
+      "https://efts.sec.gov/LATEST/search-index?q=" +
+      encodeURIComponent(topic) +
+      `&dateRange=custom&startdt=${since}&enddt=${today}&forms=8-K&size=20`;
+    const res = await fetch(url, {
+      headers: { "user-agent": EDGAR_UA },
+      signal: AbortSignal.timeout(12_000),
+    });
+    if (!res.ok) throw new Error(`edgar ${res.status}`);
+    const data = JSON.parse(await res.text()) as {
+      hits?: {
+        hits?: {
+          _source?: {
+            display_names?: string[];
+            ciks?: number[];
+            file_date?: string;
+            form?: string;
+          };
+          _id?: string; // "ACCESSION_NO:filename.htm"
+        }[];
+      };
+    };
+    for (const hit of data.hits?.hits ?? []) {
+      const src = hit._source;
+      // EDGAR display names append "(TICKERS) (CIK …)" — strip parentheticals.
+      const rawName = src?.display_names?.[0] ?? "";
+      const company = rawName
+        .replace(/\s*\([^)]*\)/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
+      const cik = src?.ciks?.[0];
+      const [accession, filename] = (hit._id ?? "").split(":");
+      if (!company || !cik || !accession || !filename) continue;
+      const link = `https://www.sec.gov/Archives/edgar/data/${cik}/${accession.replace(/-/g, "")}/${filename}`;
+      signals.push({
+        title: `${company} files ${src?.form ?? "8-K"} citing ${topic}`,
+        link,
+        publisherUrl: "https://www.sec.gov",
+        publishedAt: src?.file_date ?? today,
+        origin: "filing",
+        companyOverride: cleanName(company),
+        topicMatched: topic,
+      });
+    }
+  }
+  return signals;
 }
 
 // ─── Extraction ─────────────────────────────────────────────────────────────
@@ -236,7 +308,8 @@ function cleanName(raw: string): string | null {
 }
 
 function scoreSignal(signal: RawSignal): number {
-  let confidence = 0.58;
+  // Primary regulatory filings start high — the company said it itself.
+  let confidence = signal.origin === "filing" ? 0.78 : 0.58;
   const t = signal.title;
   // Concrete capacity or money mentioned -> stronger signal.
   if (
@@ -251,43 +324,112 @@ function scoreSignal(signal: RawSignal): number {
     if (ageDays <= 2) confidence += 0.08;
     else if (ageDays <= 7) confidence += 0.04;
   }
-  return Math.min(0.85, Number(confidence.toFixed(2)));
+  return Math.min(0.92, Number(confidence.toFixed(2)));
+}
+
+/**
+ * Topic relevance gate: at least one meaningful inquiry word must appear in
+ * the headline (or the story is about a different universe of companies).
+ */
+function isRelevant(title: string, topicWords: string[]): boolean {
+  const lower = title.toLowerCase();
+  return topicWords.some((w) => lower.includes(w));
+}
+
+/** Merge key: normalised company name across ALL sources. */
+function mergeKey(name: string): string {
+  return name
+    .toLowerCase()
+    .replace(
+      /\b(group|plc|ltd|limited|inc|incorporated|corp|corporation|company|holdings|international|intl)\b/g,
+      "",
+    )
+    .replace(/[^a-z0-9]+/g, " ")
+    .trim();
 }
 
 function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
-  const seenClusters = new Set<string>();
-  const claims: Claim[] = [];
+  // Topic vocabulary from the actual question — used for relevance gating.
+  const geo = cmd.scope.geography ?? "";
+  const topicWords = cmd.question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !STOPWORDS.has(w) && w !== geo.toLowerCase());
+
+  // Pass 1 — collect qualifying signals per merged company.
+  interface Bucket {
+    name: string;
+    best: RawSignal;
+    all: RawSignal[];
+    filingSeen: boolean;
+  }
+  const buckets = new Map<string, Bucket>();
 
   for (const s of signals) {
-    if (!SIGNAL_RE.test(s.title)) continue;
-
-    const company = extractCompany(s.title);
-    // Quality gate: an unnameable operator is not intelligence. Skip it —
-    // the story stays in the source, but we don't fabricate a company row.
+    // Filing-derived signals carry their registrant; news needs extraction.
+    const company = s.companyOverride ?? extractCompany(s.title);
     if (!company) continue;
-    if (claims.some((c) => c.company === company)) continue;
 
-    const source = s.publisherUrl ?? s.link; // publisher domain = true cluster key
-    const cluster = sourceClusterKey(source);
-    if (seenClusters.has(cluster)) continue; // one claim per source per run
-    seenClusters.add(cluster);
+    // Relevance: filings matched the query by construction; news must prove it.
+    if (!s.companyOverride && !isRelevant(s.title, topicWords)) continue;
+    if (s.companyOverride && s.topicMatched && !isRelevant(company, [s.topicMatched])) {
+      // registrant name doesn't contain the topic — that's fine, the FILING
+      // text did; keep it.
+    }
 
-    const confidence = scoreSignal(s);
-    claims.push({
-      company,
-      claim: `News signal: ${s.title.replace(/\s+-\s+[^-]+$/, "")}`,
-      confidence,
-      evidence: [
-        {
-          item: s.title,
-          source,
-          observed: s.publishedAt,
-        },
-      ],
-    });
-    if (claims.length >= 8) break; // stay focused; quality over spam
+    const key = mergeKey(company);
+    if (!key) continue;
+    const bucket = buckets.get(key);
+    if (bucket) {
+      bucket.all.push(s);
+      bucket.filingSeen ||= s.origin === "filing";
+      if (scoreSignal(s) > scoreSignal(bucket.best)) bucket.best = s;
+    } else {
+      buckets.set(key, {
+        name: company,
+        best: s,
+        all: [s],
+        filingSeen: s.origin === "filing",
+      });
+    }
   }
 
+  // Pass 2 — one claim per company, every distinct source attached as evidence.
+  const claims: Claim[] = [];
+  for (const bucket of buckets.values()) {
+    const seenClusters = new Set<string>();
+    const evidence: Evidence[] = [];
+    for (const s of bucket.all.sort((a, b) => scoreSignal(b) - scoreSignal(a))) {
+      // Filings: cite the exact document. News: cite the publisher (the
+      // article link is a redirect; the domain is the stable cluster key).
+      const source = s.origin === "filing" ? s.link : (s.publisherUrl ?? s.link);
+      const cluster = sourceClusterKey(source);
+      if (seenClusters.has(cluster)) continue;
+      seenClusters.add(cluster);
+      evidence.push({ item: s.title, source, observed: s.publishedAt });
+      if (evidence.length >= 4) break;
+    }
+
+    let confidence = scoreSignal(bucket.best);
+    // Independent corroboration across sources lifts confidence — real
+    // multi-source confirmation, not five copies of one article.
+    const distinctHosts = new Set(evidence.map((e) => sourceClusterKey(e.source).split("/")[0]));
+    if (distinctHosts.size >= 2) confidence += 0.06;
+    if (bucket.filingSeen) confidence += 0.04;
+    confidence = Math.min(0.92, Number(confidence.toFixed(2)));
+
+    claims.push({
+      company: bucket.name,
+      claim: `News signal: ${bucket.best.title.replace(/\s+-\s+[^-]+$/, "")}`,
+      confidence,
+      evidence,
+    });
+    if (claims.length >= 8) break;
+  }
+
+  // Strongest first.
+  claims.sort((a, b) => b.confidence - a.confidence);
   void cmd;
   return claims;
 }
@@ -343,6 +485,20 @@ async function researchAndSubmit(command: ResearchCommand) {
         } catch (err) {
           console.warn("  gdelt failed:", err instanceof Error ? err.message : err);
         }
+      }
+    }
+    // Primary sources: SEC filings mentioning the inquiry's core topics.
+    const topicWords = command.question
+      .toLowerCase()
+      .replace(/[^a-z0-9\s]/g, " ")
+      .split(/\s+/)
+      .filter((w) => w.length > 4 && !STOPWORDS.has(w));
+    if (topicWords.length > 0) {
+      try {
+        signals.push(...(await fetchEdgar(topicWords)));
+        console.log("  edgar signals fetched");
+      } catch (err) {
+        console.warn("  edgar failed:", err instanceof Error ? err.message : err);
       }
     }
     console.log(`  raw signals: ${signals.length}`);

@@ -257,25 +257,15 @@ function Intelligence() {
                 <label htmlFor="intent" className="label-mono text-ink-muted">
                   Please put in your request
                 </label>
-                <div className="flex flex-wrap items-center gap-4">
-                  {connectedAddress && walletOg !== null && (
-                    <span
-                      className={`label-mono ${walletOg > 0.01 ? "text-verified" : "text-flag"}`}
-                      title={`${connectedAddress} on 0G`}
-                    >
-                      wallet {walletOg.toFixed(4)} OG{walletOg <= 0.01 ? " · empty" : ""}
-                    </span>
-                  )}
-                  {account && (
-                    <span className="label-mono text-signal">
-                      {account.freeRunsLeft > 0
-                        ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
-                        : account.credits > 0
-                          ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
-                          : "no runs left"}
-                    </span>
-                  )}
-                </div>
+                {account && (
+                  <span className="label-mono text-signal">
+                    {account.freeRunsLeft > 0
+                      ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
+                      : account.credits > 0
+                        ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
+                        : "no runs left"}
+                  </span>
+                )}
               </div>
               <textarea
                 id="intent"

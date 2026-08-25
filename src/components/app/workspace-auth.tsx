@@ -1,6 +1,7 @@
 import { usePrivy, useLoginWithOAuth, useLoginWithPasskey } from "@privy-io/react-auth";
 import { useEffect, useState, type ComponentType } from "react";
 import { DiscordIcon, FarcasterIcon, GithubIcon, GoogleIcon, XIcon } from "./provider-icons";
+import { getWalletBalance } from "@/lib/orchestrator/account-fns";
 
 /**
  * Social sign-in row. Google/GitHub/Discord/X go straight to their OAuth
@@ -202,6 +203,7 @@ export function WorkspaceAuth() {
           settlement · {wallet.slice(0, 6)}…{wallet.slice(-4)}
         </p>
       )}
+      <WalletBalanceLine address={wallet} />
       <button
         type="button"
         onClick={() => logout()}
@@ -210,5 +212,52 @@ export function WorkspaceAuth() {
         Sign out
       </button>
     </div>
+  );
+}
+
+/**
+ * Live native-0G balance of the workspace's own wallet, read from chain.
+ * Green while funded; red with an "empty" flag so a top-up is never a
+ * surprise. Refreshes on mount and every 60s while the sidebar is open.
+ */
+function WalletBalanceLine({ address }: { address: string | null }) {
+  const [og, setOg] = useState<number | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    if (!address) return;
+    let cancelled = false;
+    const load = () => {
+      void getWalletBalance({ data: { address } })
+        .then((r) => {
+          if (cancelled) return;
+          if (r.ok) {
+            setOg(r.og);
+            setFailed(false);
+          } else {
+            setFailed(true);
+          }
+        })
+        .catch(() => !cancelled && setFailed(true));
+    };
+    load();
+    const timer = window.setInterval(load, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+    };
+  }, [address]);
+
+  if (!address) return null;
+
+  return (
+    <p
+      className={`font-mono text-[0.62rem] ${failed ? "text-flag" : og !== null && og <= 0.01 ? "text-flag" : "text-verified"}`}
+      title={failed ? "Balance lookup failed" : `${address} on 0G`}
+    >
+      {failed
+        ? "balance unavailable"
+        : `balance · ${og !== null ? `${og.toFixed(4)} OG` : "checking…"}${og !== null && og <= 0.01 ? " · EMPTY" : ""}`}
+    </p>
   );
 }

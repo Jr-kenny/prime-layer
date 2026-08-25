@@ -340,6 +340,7 @@ export async function verifyRunPayment(
     kind: "run_payment",
     txHash,
     inquiryId,
+    paidOg: Number(ethers.formatEther(tx.value)),
     createdAt: nowIso(),
   });
   return { ok: true, paidOg: Number(ethers.formatEther(tx.value)) };

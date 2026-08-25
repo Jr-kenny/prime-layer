@@ -130,6 +130,7 @@ const DDL = [
     kind TEXT NOT NULL,
     tx_hash TEXT,
     inquiry_id TEXT,
+    paid_og REAL,
     created_at TEXT NOT NULL
   )`,
   `CREATE TABLE IF NOT EXISTS dispatch_acks (
@@ -175,6 +176,7 @@ export async function ensureSchema() {
     "ALTER TABLE claims ADD COLUMN grade_mode TEXT",
     "ALTER TABLE claims ADD COLUMN llm_note TEXT",
     "ALTER TABLE settlements ADD COLUMN paid_og REAL",
+    "ALTER TABLE credit_ledger ADD COLUMN paid_og REAL",
     "ALTER TABLE settlements ADD COLUMN payout_tx TEXT",
     "ALTER TABLE settlements ADD COLUMN payout_error TEXT",
   ];

@@ -14,12 +14,31 @@
 
 export const INQUIRY_PRICING = {
   /** USD per standard inquiry readout. */
-  standardInquiryUsd: 250,
+  standardInquiryUsd: Number(process.env["PRIME_RUN_PRICE_USD"]) || 20,
   /** Share of each inquiry payment that funds the contributor pool (60%). */
   contributorPoolShare: 0.6,
   /** Platform + infrastructure + processing take (40%). */
   platformShare: 0.4,
 } as const;
+
+/**
+ * Split an actually-received payment into platform take and contributor pool.
+ * `paidOg` is the native amount the buyer sent; conversion uses the same
+ * rate the paywall quoted, so the pool always reflects real money in.
+ */
+export function splitPayment(paidOg: number): {
+  paidUsd: number;
+  poolUsd: number;
+  platformUsd: number;
+} {
+  const rate = Number(process.env["PRIME_OG_USD_RATE"]) || 2;
+  const paidUsd = paidOg * rate;
+  return {
+    paidUsd: Math.round(paidUsd * 100) / 100,
+    poolUsd: Math.round(paidUsd * INQUIRY_PRICING.contributorPoolShare * 100) / 100,
+    platformUsd: Math.round(paidUsd * INQUIRY_PRICING.platformShare * 100) / 100,
+  };
+}
 
 export type SettlementLine = {
   agentId: string;

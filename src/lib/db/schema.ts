@@ -124,9 +124,11 @@ export const creditLedger = sqliteTable("credit_ledger", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   accountId: text("account_id").notNull(),
   delta: integer("delta").notNull(),
-  kind: text("kind").notNull(), // free_run | run | topup
+  kind: text("kind").notNull(), // free_run | run | topup | run_payment
   txHash: text("tx_hash"),
   inquiryId: text("inquiry_id"),
+  /** Native OG actually received (run_payment rows). */
+  paidOg: real("paid_og"),
   createdAt: text("created_at").notNull(),
 });
 

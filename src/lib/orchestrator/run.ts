@@ -4,11 +4,13 @@ import {
   dispatchAcks,
   inquiries,
   claims,
+  creditLedger,
   evidenceRecords,
   opportunities,
   settlements,
 } from "@/lib/db/schema";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
+import { INQUIRY_PRICING } from "@/lib/0g/payments";
 import {
   gradeClaims,
   sourceClusterKey,
@@ -18,7 +20,7 @@ import {
   type SubmittedClaim,
 } from "./grade";
 import { llmGradeClaims } from "./llm-grade";
-import { buildSettlement } from "@/lib/0g/payments";
+import { buildSettlement, splitPayment } from "@/lib/0g/payments";
 import { settleCycle } from "@/lib/0g/payouts";
 import { synthesizeInquiry } from "./synthesize";
 import { anchorRecord } from "@/lib/0g/evidence-anchor";
@@ -467,16 +469,18 @@ export async function gradeAndSynthesize(inquiryId: string) {
     void anchorOpportunity(oppId);
   }
 
-  // Record settlement lines from weights (amounts stay private to the agent),
-  // then anchor the cycle's settlement roll-up so payouts are publicly
-  // verifiable without exposing any agent's exact earnings.
-  const { poolUsd } = buildSettlement(
-    graded.map((g) => ({
-      agentId: g.agentId,
-      wallet: agentRows.find((a) => a.id === g.agentId)?.wallet ?? "",
-      weight: g.weight,
-    })),
-  );
+  // The contributor pool is the REAL payment the buyer made for this
+  // inquiry (from the credit_ledger run_payment row), split 60/40. Free and
+  // guest runs have no payment row — the platform funds their pool at the
+  // standard price so agents still earn.
+  let poolUsd = INQUIRY_PRICING.standardInquiryUsd * INQUIRY_PRICING.contributorPoolShare;
+  const [payment] = await db
+    .select()
+    .from(creditLedger)
+    .where(and(eq(creditLedger.inquiryId, inquiryId), eq(creditLedger.kind, "run_payment")));
+  if (payment && Number(payment.paidOg ?? 0) > 0) {
+    poolUsd = splitPayment(Number(payment.paidOg)).poolUsd;
+  }
   const weightTotal = graded.reduce((s, g) => s + g.weight, 0);
   const settlementLines: { agentId: string; wallet: string; weight: number; amountUsd: number }[] =
     [];

@@ -52,14 +52,13 @@ type ReadoutEntry = {
 };
 
 const EXAMPLES = [
-  "I have 5,000 TVs to sell in Nigeria. Find companies becoming likely to need them.",
-  "Find African fintechs showing evidence that fraud-prevention spending may increase.",
-  "Which German companies appear likely to expand warehouse capacity?",
+  "Which hotel chains and manufacturers are expanding or building new facilities right now?",
+  "hey we are a company dealing on electricals and yesterday stocks worth 13m usd came in and we have 6 months to clear it. can you look for future partners we can meet that may be in need of these goods, not limited to only chandeliers, sockets, leds, solars etc we have a wide range of goods in stock",
 ];
 
 function Intelligence() {
   const [query, setQuery] = useState(
-    "I sell commercial solar systems worth $20k–$330k. Find Nigerian manufacturers becoming likely to need them.",
+    "Which hotel chains and manufacturers are expanding or building new facilities right now?",
   );
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [inquiry, setInquiry] = useState<InquiryState | null>(null);

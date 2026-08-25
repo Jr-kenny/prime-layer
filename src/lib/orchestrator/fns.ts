@@ -1,7 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { db, ensureSchema, nowIso, newId } from "@/lib/db";
-import { inquiries, agents, supplyRecords } from "@/lib/db/schema";
+import { inquiries, agents, supplyRecords, accounts } from "@/lib/db/schema";
 import { eq, desc } from "drizzle-orm";
 import { runInquiry, SOURCING_WINDOW_SECONDS } from "@/lib/orchestrator/run";
 
@@ -63,6 +63,55 @@ export const submitInquiry = createServerFn({ method: "POST" })
 export { getAccount, verifyTopup, pricingPublic } from "./credits";
 export type { TopupResult } from "./credits";
 export { FREE_TRIAL_RUNS, RUN_PRICE_USD } from "./credits";
+export { runPriceInvoice } from "./credits";
+import { getAccount } from "./credits";
+
+const payRunSchema = z.object({
+  txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
+  question: z.string().min(8).max(500),
+  identity: z.string().min(3).max(120),
+  email: z.string().max(160).optional(),
+  wallet: z.string().max(60).optional(),
+});
+
+/**
+ * Pay-per-run entry: creates the inquiry, verifies the buyer's on-chain
+ * payment for THIS inquiry, then dispatches. The payment is bound to the
+ * inquiry id before it ever hits the grid.
+ */
+export const submitPaidInquiry = createServerFn({ method: "POST" })
+  .validator((input: unknown) => payRunSchema.parse(input))
+  .handler(async ({ data }) => {
+    await ensureSchema();
+    const id = newId("INQ");
+    const ts = nowIso();
+
+    // Ensure the account exists, then verify their payment against it.
+    await getAccount({
+      data: {
+        identity: data.identity,
+        ...(data.email ? { email: data.email } : {}),
+        ...(data.wallet ? { wallet: data.wallet } : {}),
+      },
+    });
+    const [account] = await db.select().from(accounts).where(eq(accounts.identity, data.identity));
+    if (!account) return { ok: false as const, error: "Account setup failed." };
+
+    const { verifyRunPayment } = await import("./credits");
+    const paid = await verifyRunPayment(data.txHash, id, account.id);
+    if (!paid.ok) return { ok: false as const, error: paid.error };
+
+    await db.insert(inquiries).values({
+      id,
+      question: data.question,
+      status: "dispatching",
+      createdAt: ts,
+      updatedAt: ts,
+    });
+    const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8081";
+    void runInquiry(id, `${submitUrl}/api/claims/submit`);
+    return { ok: true as const, inquiryId: id };
+  });
 
 export type SynthesisSource = { label: string; url: string };
 

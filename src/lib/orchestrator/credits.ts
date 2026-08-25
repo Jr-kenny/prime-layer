@@ -246,3 +246,86 @@ export async function verifyTopupInternal(identity: string, txHash: string): Pro
 export const verifyTopup = createServerFn({ method: "POST" })
   .validator((input: unknown) => topupSchema.parse(input))
   .handler(async ({ data }) => verifyTopupInternal(data.identity, data.txHash));
+
+/**
+ * Pay-per-run flow: the buyer pays FROM THEIR OWN PRIVY WALLET straight to
+ * the platform wallet — one payment, one run, no balance, no manual
+ * hash-pasting. The server quotes the exact wei and verifies the resulting
+ * tx on-chain before the run dispatches.
+ */
+
+/** Exact native-wei price of one intelligence run at the configured rate. */
+export async function runPriceInvoice() {
+  const receiver = platformWallet();
+  const { ethers } = await import("ethers");
+  const rate = Number(process.env["PRIME_OG_USD_RATE"]) || 2;
+  return {
+    ...(receiver ? { wallet: receiver } : {}),
+    usd: RUN_PRICE_USD,
+    amountWei: ethers.parseEther(String(RUN_PRICE_USD / rate)).toString(),
+  };
+}
+
+export type RunPaymentResult = { ok: true; paidOg: number } | { ok: false; error: string };
+
+/**
+ * Verifies a per-run payment tx: confirmed, paid the platform wallet in
+ * native 0G, worth at least one run, and never used for another run.
+ * Marks the tx consumed so it can't fund two runs.
+ */
+export async function verifyRunPayment(
+  txHash: string,
+  inquiryId: string,
+  accountId: string,
+): Promise<RunPaymentResult> {
+  await ensureSchema();
+  const receiver = platformWallet();
+  if (!receiver) return { ok: false, error: "Payments are not configured yet." };
+
+  const invoice = await runPriceInvoice();
+  const minWei = BigInt(invoice.amountWei);
+
+  // Replay guard across ALL run payments and topups.
+  const seen = await db.select().from(creditLedger).where(eq(creditLedger.txHash, txHash));
+  if (seen.length > 0) return { ok: false, error: "This payment was already used." };
+
+  const { ethers } = await import("ethers");
+  const rpc = process.env["ZERO_G_RPC_URL"]?.trim() || "https://evmrpc-testnet.0g.ai";
+  const provider = new ethers.JsonRpcProvider(rpc);
+  let tx;
+  let receipt;
+  try {
+    tx = await provider.getTransaction(txHash);
+    if (!tx) return { ok: false, error: "Payment not visible on-chain yet — retry in a moment." };
+    receipt = await provider.waitForTransaction(txHash, 1, 45_000);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? `Chain read failed: ${err.message.slice(0, 120)}`
+          : "Chain read failed",
+    };
+  }
+  if (!receipt || receipt.status !== 1) return { ok: false, error: "Payment failed on chain." };
+  if ((tx.to ?? "").toLowerCase() !== receiver.toLowerCase()) {
+    return { ok: false, error: "Payment did not reach the platform wallet." };
+  }
+  if (tx.value < minWei) {
+    const rate = Number(process.env["PRIME_OG_USD_RATE"]) || 2;
+    return {
+      ok: false,
+      error: `Underpaid — one run costs $${RUN_PRICE_USD} (${ethers.formatEther(minWei)} OG at ${rate}/OG).`,
+    };
+  }
+
+  await db.insert(creditLedger).values({
+    accountId,
+    delta: 0,
+    kind: "run_payment",
+    txHash,
+    inquiryId,
+    createdAt: nowIso(),
+  });
+  return { ok: true, paidOg: Number(ethers.formatEther(tx.value)) };
+}

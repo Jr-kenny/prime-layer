@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowUpRight, Bot, Database, Layers3, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
 import {
@@ -11,6 +11,8 @@ import {
   submitInquiry,
   getAccount,
   verifyTopup,
+  submitPaidInquiry,
+  runPriceInvoice,
 } from "@/lib/orchestrator/fns";
 
 type AccountView = {
@@ -65,8 +67,11 @@ function Intelligence() {
   const [account, setAccount] = useState<AccountView | null>(null);
   const [paywall, setPaywall] = useState<{ priceUsd: number; paymentWallet?: string } | null>(null);
   const [topup, setTopup] = useState<{ state: "idle" | "sent"; txHash: string } | null>(null);
+  const [paying, setPaying] = useState(false);
+  const [payError, setPayError] = useState<string | null>(null);
   const pollRef = useRef<number | null>(null);
   const { ready, authenticated, user } = usePrivy();
+  const { wallets } = useWallets();
   const identity = user?.email?.address ?? user?.wallet?.address ?? null;
 
   useEffect(() => {
@@ -159,6 +164,51 @@ function Intelligence() {
     }
   }
 
+  async function payAndRun() {
+    if (!identity || !paywall?.paymentWallet) return;
+    const connected = wallets[0];
+    if (!connected) {
+      setPayError("No wallet connected — sign in again with a wallet-enabled account.");
+      return;
+    }
+    setPaying(true);
+    setPayError(null);
+    try {
+      const invoice = await runPriceInvoice();
+      if (!invoice?.wallet) throw new Error("Payments not configured.");
+      const provider = await connected.getEthereumProvider();
+      const [from] = (await provider.request({ method: "eth_requestAccounts" })) as string[];
+      const amountHex = "0x" + BigInt(invoice.amountWei).toString(16);
+      const txHash = (await provider.request({
+        method: "eth_sendTransaction",
+        params: [{ from, to: invoice.wallet, value: amountHex }],
+      })) as string;
+
+      const result = await submitPaidInquiry({
+        data: {
+          txHash,
+          question: query,
+          identity,
+          ...(user?.email?.address ? { email: user.email.address } : {}),
+          ...(user?.wallet?.address ? { wallet: user.wallet.address } : {}),
+        },
+      });
+      if (result.ok) {
+        setAccount(await getAccount({ data: { identity } }));
+        setPaywall(null);
+        setPhase("running");
+        poll(result.inquiryId);
+      } else {
+        setPayError(result.error);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setPayError(msg.includes("rejected") ? "Payment was cancelled." : msg.slice(0, 160));
+    } finally {
+      setPaying(false);
+    }
+  }
+
   const steps = buildSteps(inquiry, agents.length);
   const readout = (inquiry?.readout as ReadoutEntry[] | null) ?? [];
   const synthesis = inquiry?.synthesis ?? null;
@@ -219,40 +269,33 @@ function Intelligence() {
 
           {paywall && (
             <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
-              <p className="label-mono text-signal">Out of runs</p>
+              <p className="label-mono text-signal">Free runs used up</p>
               <h3 className="mt-2 font-display text-2xl text-vellum">
-                Fund ${paywall.priceUsd} per intelligence run
+                ${paywall.priceUsd} per intelligence run
               </h3>
               <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-                Your free runs are used up. Send ${paywall.priceUsd} in 0G (or any multiple of it)
-                from your wallet to the address below, paste your transaction hash, and your credits
-                land instantly after on-chain verification.
+                Pay from your wallet and the run starts immediately. The payment goes
+                {paywall.paymentWallet ? " directly to Prime Layer" : ""} on 0G chain and is
+                verified before your request dispatches.
               </p>
-              {paywall.paymentWallet ? (
-                <>
-                  <p className="mt-4 break-all rounded-sm border border-ink-border bg-ink p-3 font-mono text-xs text-vellum">
-                    {paywall.paymentWallet}
-                  </p>
-                  <div className="mt-4 flex flex-wrap items-center gap-3">
-                    <input
-                      value={topup?.txHash ?? ""}
-                      onChange={(event) => setTopup({ state: "sent", txHash: event.target.value })}
-                      placeholder="Paste your 0G transaction hash"
-                      className="app-input min-w-72 flex-1 border-ink-border bg-slate text-vellum placeholder:text-ink-subtle"
-                    />
-                    <button
-                      type="button"
-                      onClick={verifyPayment}
-                      disabled={submitting || !topup?.txHash}
-                      className="app-signal-button shrink-0 disabled:opacity-60"
-                    >
-                      {submitting ? "Verifying…" : "Verify & add credits"}
-                    </button>
-                  </div>
-                </>
+              {payError && (
+                <p className="mt-4 border-l-2 border-flag pl-4 font-mono text-xs leading-relaxed text-flag">
+                  {payError}
+                </p>
+              )}
+              {wallets.length > 0 && paywall.paymentWallet ? (
+                <button
+                  type="button"
+                  onClick={payAndRun}
+                  disabled={paying}
+                  className="app-signal-button mt-5 disabled:opacity-60"
+                >
+                  {paying ? "Waiting for payment…" : `Pay $${paywall.priceUsd} & run`}
+                  {!paying && <ArrowUpRight className="size-3.5" aria-hidden />}
+                </button>
               ) : (
                 <p className="mt-4 font-mono text-xs text-flag">
-                  Payments are not set up on the server yet (PRIME_PLATFORM_WALLET missing).
+                  Sign in with a wallet-enabled account to pay for runs.
                 </p>
               )}
             </div>

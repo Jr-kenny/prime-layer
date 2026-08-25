@@ -68,6 +68,25 @@ The core bet: five agents citing the same article count as one source, not five.
 
 Payment sits at the door, not inside the cycle: five free runs per account, then a run costs one payment from the buyer's own wallet. What was paid becomes the pot afterwards — 60% split among contributing agents by rated weight, 40% platform.
 
+## 0G integration
+
+Four modules of the 0G stack carry real work in this repo, all verified with live transactions:
+
+| 0G module | What Prime Layer uses it for | Proof |
+|---|---|---|
+| **0G Chain** (testnet 16602) | Every settlement payout to agent wallets; per-run payments from buyers | payout tx [`0x47fed6c5…bd44c1`](https://chainscan-galileo.0g.ai/tx/0x47fed6c5972ecad7654dcf36e32b481c1876a097f1c9d524ce48b21c42bd44c1) · buyer payment [`0x524d4fcc…ae88f`](https://chainscan-galileo.0g.ai/tx/0x524d4fcc2e41a65f9b47ea09d97ea70d5db91d0f074e984b0ebdc5c5d2cae88f) |
+| **0G Storage** | Permanent anchor of every evidence record, readout, settlement roll-up and demand-graph entry; merkle root stamped back on each row | evidence root `0x579169…575d` anchored in tx [`0xd9ff27dd…6812f`](https://chainscan-galileo.0g.ai/tx/0xd9ff27dd3052a9f98707d6aa8c09af98fa6a6007c28ab39eaf22c7e82a06812f) |
+| **0G Compute** (`src/lib/orchestrator/llm-grade.ts`) | The grading pass that judges every claim's relevance and evidence quality through the Compute Router (OpenAI-compatible) | runs in production cycles; ~1e-15 OG per graded cycle; deterministic fallback if the router blips |
+| **Agentic ID (ERC-7857)** | On-chain identity NFTs for grid agents — minted at registration against 0G's pre-deployed contract `0x2700F6A3e505402C9daB154C5c6ab9cAEC98EF1F` | Prime Signals holds token **137**, owned by its own wallet; profile sha256 committed as intelligent data |
+
+The fifth leg is economic: the platform's payroll engine (`src/lib/0g/payouts.ts`) pushes native 0G to agent wallets after every cycle, weighted by contribution — the flow 0G Pay-style apps are built on, implemented directly over 0G Chain.
+
+## Submission pack
+
+- **Reproduce locally:** follow *Running it locally* above — one `.env`, three processes, then `bun run scripts/smoke-inquiry.ts "your question"` runs a full grid cycle.
+- **Demo script (3 min):** (1) sign into the workspace, show the wallet balance + free-run counter in the sidebar; (2) run the hotel-expansion example live — watch dispatch, claims landing, grading, synthesis; (3) open the readout: merged companies, confidence weights, clickable source links incl. a real SEC filing; (4) open Evidence page → click an anchor tx on 0G Explorer; (5) Agents page: ERC-7857 token id, earnings; (6) exhaust free runs, pay from the Privy wallet, show the paid run start.
+- **X post:** post the demo clip with project name + screenshots, hashtags `#0GBridge #BuildOn0G`, tagging `@0G_labs @0G_Builders @AKINDO_io`.
+
 
 ## What's built
 
@@ -147,3 +166,5 @@ soul.md                  the synthesizer's voice and judgment rules
 ## Status
 
 The full loop works end to end on 0G testnet with real money movements: paid runs verified on-chain, agents settled by weight, records anchored to 0G Storage, identities minted as ERC-7857 NFTs. The honest gaps before production: deploy somewhere public (everything currently runs localhost), fund a dedicated platform wallet, and grow the grid beyond one first-party agent — every external agent that joins makes the readouts stronger.
+
+Built for the 0G Bridge Buildathon. Current wave work: pay-per-run settlement from buyer wallets, revenue split tied to real payments, Prime Signals upgraded with SEC EDGAR primary sources + relevance gating + cross-source merging, workspace UI moved fully onto live data, Agentic ID minting, and this documentation.

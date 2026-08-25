@@ -1,19 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { ArrowUpRight, Bot, Database, Layers3, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
+import { PrivyIdentity, type PrivyIdentityInfo } from "@/components/app/privy-identity";
 import {
   getInquiry,
   listLiveAgents,
   listSupplyRecords,
   submitInquiry,
+  submitPaidInquiry,
+} from "@/lib/orchestrator/fns";
+import {
   getAccount,
   verifyTopup,
-  submitPaidInquiry,
   runPriceInvoice,
-} from "@/lib/orchestrator/fns";
+  getWalletBalance,
+} from "@/lib/orchestrator/account-fns";
 
 type AccountView = {
   id: string;
@@ -22,7 +25,6 @@ type AccountView = {
   freeRunsLeft: number;
   priceUsd: number;
 };
-
 export const Route = createFileRoute("/app/")({
   head: () => ({
     meta: [
@@ -69,10 +71,16 @@ function Intelligence() {
   const [topup, setTopup] = useState<{ state: "idle" | "sent"; txHash: string } | null>(null);
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
+  const [walletOg, setWalletOg] = useState<number | null>(null);
   const pollRef = useRef<number | null>(null);
-  const { ready, authenticated, user } = usePrivy();
-  const { wallets } = useWallets();
-  const identity = user?.email?.address ?? user?.wallet?.address ?? null;
+  const [privy, setPrivy] = useState<PrivyIdentityInfo>({
+    authenticated: false,
+    email: null,
+    walletAddress: null,
+    firstWallet: null,
+  });
+  const identity = privy.email ?? privy.walletAddress ?? null;
+  const connectedAddress = privy.firstWallet?.address ?? privy.walletAddress;
 
   useEffect(() => {
     void listLiveAgents().then(setAgents);
@@ -87,11 +95,24 @@ function Intelligence() {
     void getAccount({
       data: {
         identity,
-        email: user?.email?.address ?? undefined,
-        wallet: user?.wallet?.address ?? undefined,
+        email: privy.email ?? undefined,
+        wallet: privy.walletAddress ?? undefined,
       },
     }).then(setAccount);
-  }, [identity, user?.email?.address, user?.wallet?.address]);
+  }, [identity, privy.email, privy.walletAddress]);
+
+  // Live wallet balance — the buyer's own Privy wallet on 0G. Refreshes on
+  // sign-in and right after any payment so "empty" is never a surprise.
+  const refreshBalance = useCallback(() => {
+    if (!connectedAddress) return;
+    void getWalletBalance({ data: { address: connectedAddress } }).then((r) => {
+      if (r.ok) setWalletOg(r.og);
+    });
+  }, [connectedAddress]);
+
+  useEffect(() => {
+    refreshBalance();
+  }, [refreshBalance]);
 
   useEffect(
     () => () => {
@@ -132,8 +153,8 @@ function Intelligence() {
         ...(identity
           ? {
               identity,
-              ...(user?.email?.address ? { email: user.email.address } : {}),
-              ...(user?.wallet?.address ? { wallet: user.wallet.address } : {}),
+              ...(privy.email ? { email: privy.email } : {}),
+              ...(privy.walletAddress ? { wallet: privy.walletAddress } : {}),
             }
           : {}),
       },
@@ -166,7 +187,7 @@ function Intelligence() {
 
   async function payAndRun() {
     if (!identity || !paywall?.paymentWallet) return;
-    const connected = wallets[0];
+    const connected = privy.firstWallet;
     if (!connected) {
       setPayError("No wallet connected — sign in again with a wallet-enabled account.");
       return;
@@ -189,14 +210,15 @@ function Intelligence() {
           txHash,
           question: query,
           identity,
-          ...(user?.email?.address ? { email: user.email.address } : {}),
-          ...(user?.wallet?.address ? { wallet: user.wallet.address } : {}),
+          ...(privy.email ? { email: privy.email } : {}),
+          ...(privy.walletAddress ? { wallet: privy.walletAddress } : {}),
         },
       });
       if (result.ok) {
         setAccount(await getAccount({ data: { identity } }));
         setPaywall(null);
         setPhase("running");
+        refreshBalance();
         poll(result.inquiryId);
       } else {
         setPayError(result.error);
@@ -215,6 +237,7 @@ function Intelligence() {
 
   return (
     <div>
+      <PrivyIdentity onChange={setPrivy} />
       <section className="app-overview-hero">
         <div className="app-overview-hero-inner">
           <p className="app-overview-kicker label-mono">
@@ -234,15 +257,25 @@ function Intelligence() {
                 <label htmlFor="intent" className="label-mono text-ink-muted">
                   Please put in your request
                 </label>
-                {account && (
-                  <span className="label-mono text-signal">
-                    {account.freeRunsLeft > 0
-                      ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
-                      : account.credits > 0
-                        ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
-                        : "no runs left"}
-                  </span>
-                )}
+                <div className="flex flex-wrap items-center gap-4">
+                  {connectedAddress && walletOg !== null && (
+                    <span
+                      className={`label-mono ${walletOg > 0.01 ? "text-verified" : "text-flag"}`}
+                      title={`${connectedAddress} on 0G`}
+                    >
+                      wallet {walletOg.toFixed(4)} OG{walletOg <= 0.01 ? " · empty" : ""}
+                    </span>
+                  )}
+                  {account && (
+                    <span className="label-mono text-signal">
+                      {account.freeRunsLeft > 0
+                        ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
+                        : account.credits > 0
+                          ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
+                          : "no runs left"}
+                    </span>
+                  )}
+                </div>
               </div>
               <textarea
                 id="intent"
@@ -283,7 +316,7 @@ function Intelligence() {
                   {payError}
                 </p>
               )}
-              {wallets.length > 0 && paywall.paymentWallet ? (
+              {privy.firstWallet && paywall.paymentWallet ? (
                 <button
                   type="button"
                   onClick={payAndRun}

@@ -44,34 +44,49 @@ const identitySchema = z.object({
   wallet: z.string().max(60).optional(),
 });
 
+export type AccountView = {
+  id: string;
+  credits: number;
+  freeRunsUsed: number;
+  freeRunsLeft: number;
+  priceUsd: number;
+};
+
+/** Fetch-or-create the caller's account row (plain helper for server use). */
+export async function getOrCreateAccount(
+  identity: string,
+  email?: string,
+  wallet?: string,
+): Promise<AccountView> {
+  await ensureSchema();
+  let [row] = await db.select().from(accounts).where(eq(accounts.identity, identity));
+  if (!row) {
+    const id = newId("ACC");
+    await db.insert(accounts).values({
+      id,
+      identity,
+      ...(email ? { email } : {}),
+      ...(wallet ? { wallet } : {}),
+      credits: 0,
+      freeRunsUsed: 0,
+      createdAt: nowIso(),
+    });
+    [row] = await db.select().from(accounts).where(eq(accounts.identity, identity));
+  }
+  const freeLeft = Math.max(0, FREE_TRIAL_RUNS - (row?.freeRunsUsed ?? 0));
+  return {
+    id: row!.id,
+    credits: row!.credits,
+    freeRunsUsed: row!.freeRunsUsed,
+    freeRunsLeft: freeLeft,
+    priceUsd: RUN_PRICE_USD,
+  };
+}
+
 /** Fetch (or lazily create) the caller's account + current balance. */
 export const getAccount = createServerFn({ method: "POST" })
   .validator((input: unknown) => identitySchema.parse(input))
-  .handler(async ({ data }) => {
-    await ensureSchema();
-    let [row] = await db.select().from(accounts).where(eq(accounts.identity, data.identity));
-    if (!row) {
-      const id = newId("ACC");
-      await db.insert(accounts).values({
-        id,
-        identity: data.identity,
-        email: data.email ?? null,
-        wallet: data.wallet ?? null,
-        credits: 0,
-        freeRunsUsed: 0,
-        createdAt: nowIso(),
-      });
-      [row] = await db.select().from(accounts).where(eq(accounts.identity, data.identity));
-    }
-    const freeLeft = Math.max(0, FREE_TRIAL_RUNS - (row?.freeRunsUsed ?? 0));
-    return {
-      id: row!.id,
-      credits: row!.credits,
-      freeRunsUsed: row!.freeRunsUsed,
-      freeRunsLeft: freeLeft,
-      priceUsd: RUN_PRICE_USD,
-    };
-  });
+  .handler(async ({ data }) => getOrCreateAccount(data.identity, data.email, data.wallet));
 
 const consumeSchema = z.object({
   identity: z.string().min(3).max(120),

@@ -60,11 +60,7 @@ export const submitInquiry = createServerFn({ method: "POST" })
     return { inquiryId: id };
   });
 
-export { getAccount, verifyTopup, pricingPublic } from "./credits";
-export type { TopupResult } from "./credits";
-export { FREE_TRIAL_RUNS, RUN_PRICE_USD } from "./credits";
-export { runPriceInvoice } from "./credits";
-import { getAccount } from "./credits";
+export type SynthesisSource = { label: string; url: string };
 
 const payRunSchema = z.object({
   txHash: z.string().regex(/^0x[a-fA-F0-9]{64}$/),
@@ -87,15 +83,8 @@ export const submitPaidInquiry = createServerFn({ method: "POST" })
     const ts = nowIso();
 
     // Ensure the account exists, then verify their payment against it.
-    await getAccount({
-      data: {
-        identity: data.identity,
-        ...(data.email ? { email: data.email } : {}),
-        ...(data.wallet ? { wallet: data.wallet } : {}),
-      },
-    });
-    const [account] = await db.select().from(accounts).where(eq(accounts.identity, data.identity));
-    if (!account) return { ok: false as const, error: "Account setup failed." };
+    const { getOrCreateAccount } = await import("./credits");
+    const account = await getOrCreateAccount(data.identity, data.email, data.wallet);
 
     const { verifyRunPayment } = await import("./credits");
     const paid = await verifyRunPayment(data.txHash, id, account.id);
@@ -112,8 +101,6 @@ export const submitPaidInquiry = createServerFn({ method: "POST" })
     void runInquiry(id, `${submitUrl}/api/claims/submit`);
     return { ok: true as const, inquiryId: id };
   });
-
-export type SynthesisSource = { label: string; url: string };
 
 export type SynthesisView = {
   preamble: string;

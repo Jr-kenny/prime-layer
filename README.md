@@ -9,33 +9,64 @@ The core bet: five agents citing the same article count as one source, not five.
 ## How a run flows
 
 ```
- BUSINESS ASKS A QUESTION          THE GRID DOES THE WORK
- ────────────────────────         ───────────────────────────────────────
- "which hotels are                 orchestrator dispatches the same
-  expanding right now?"   ──►      command to every agent on the grid
-                                            │
-                     each agent decides whether to answer and
-                     researches on its own (Prime Signals sweeps
-                     news + SEC filings; external agents bring
-                     whatever sources they have)
-                                            │
-                     claims come back: company + what's happening
-                     + source URLs the client can open
-                                            │
-                     orchestrator clusters duplicate sources,
-                     grades every claim (deterministic scoring,
-                     then an LLM pass for relevance + evidence)
-                                            │
-                     synthesis merges same-company entries into
-                     one readout, written by a soul-driven voice —
-                     honestly weak when the evidence is weak
-                                            │
-                     readout lands in the workspace; evidence,
-                     readout, settlement roll-up, and demand-graph
-                     entries are anchored to 0G Storage
+                    ┌────────────────────────────────┐
+                    │             BUYER              │
+                    │  submits one request from the  │
+                    │  workspace: "which hotels are  │
+                    │  expanding right now?"         │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │         ORCHESTRATOR           │
+                    │  publishes the inquiry and     │
+                    │  sends the SAME research       │
+                    │  command to EVERY agent online │
+                    │  on the grid                   │
+                    └───────┬────────────────┬───────┘
+                            ▼                ▼
+              ┌──────────────────┐   ┌──────────────────┐
+              │  PRIME SIGNALS   │   │  EXTERNAL AGENT  │
+              │  Google News RSS │   │  brings whatever │
+              │  GDELT           │   │  sources it has  │
+              │  SEC EDGAR 8-Ks  │   │                  │
+              └────────┬─────────┘   └────────┬─────────┘
+                       │ each agent DECIDES: answer or decline,
+                       │ researches alone during the sourcing
+                       │ window, then submits claims:
+                       │ company · signal · confidence · source URLs
+                       └───────────┬──────────────────┘
+                                   ▼
+                    ┌────────────────────────────────┐
+                    │  ORCHESTRATOR — WINDOW CLOSED  │
+                    │  clusters duplicates: five     │
+                    │  citations of one article =    │
+                    │  ONE source                    │
+                    │  rates every claim: source     │
+                    │  tier, independence, recency,  │
+                    │  money/capacity, then an LLM   │
+                    │  pass for relevance + evidence │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │    SYNTHESIS (reads soul.md)   │
+                    │  merges same-company entries   │
+                    │  into ONE recommendation per   │
+                    │  real company; honest preamble │
+                    │  when evidence is thin         │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │      BACK TO THE BUSINESS      │
+                    │  ranked recommendations, each  │
+                    │  with clickable sources •      │
+                    │  weights became settlement     │
+                    │  lines • evidence, readout and │
+                    │  demand-graph entries anchored │
+                    │  to 0G Storage                 │
+                    └────────────────────────────────┘
 ```
 
-Payment sits at the door, not inside the pipeline: five free runs per account, then a run costs one payment from the buyer's own wallet. What was paid becomes the pot afterwards — 60% split among contributing agents by graded weight, 40% platform.
+Payment sits at the door, not inside the cycle: five free runs per account, then a run costs one payment from the buyer's own wallet. What was paid becomes the pot afterwards — 60% split among contributing agents by rated weight, 40% platform.
 
 
 ## What's built

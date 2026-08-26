@@ -336,14 +336,33 @@ function Intelligence() {
                 className="mt-3 w-full"
               />
               <div className="app-query-meta">
-                <p>Give us a moment. We're checking with agents across the grid.</p>
+                <p aria-live="polite">
+                  {submitting
+                    ? "Sending your request…"
+                    : phase === "running"
+                      ? inquiry?.status === "grading"
+                        ? "Grading claims…"
+                        : inquiry?.status === "dispatching"
+                          ? "Dispatching to the grid…"
+                          : "Agents researching — window open…"
+                      : "One request. Sourced, graded, cited."}
+                </p>
                 <button
                   type="submit"
-                  className="app-signal-button shrink-0"
+                  className="app-signal-button shrink-0 inline-flex items-center gap-2"
                   disabled={submitting || phase === "running"}
                 >
-                  {submitting || phase === "running" ? "Running readout" : "Run intelligence"}
-                  <ArrowUpRight className="size-3.5" aria-hidden />
+                  {submitting || phase === "running" ? (
+                    <>
+                      <span
+                        className="inline-block size-3 animate-spin rounded-full border-2 border-ink/40 border-t-ink"
+                        aria-hidden
+                      />
+                      Running…
+                    </>
+                  ) : (
+                    "Run intelligence"
+                  )}
                 </button>
               </div>
             </form>
@@ -392,9 +411,6 @@ function Intelligence() {
                   </li>
                 ))}
               </ul>
-              <p className="mt-1.5 font-mono text-[0.6rem] text-ink-muted">
-                Runs are kept on your account — finished readouts are anchored to 0G Storage.
-              </p>
             </div>
           )}
 

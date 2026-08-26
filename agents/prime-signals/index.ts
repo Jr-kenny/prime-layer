@@ -448,6 +448,10 @@ export function sourceClusterKey(source: string): string {
 
 let agentId: string | null = null;
 
+// Public URL other hosts use to reach this agent (registered with the
+// orchestrator). Defaults to localhost for local dev grids.
+const PUBLIC_URL = process.env["CONNECTOR_PUBLIC_URL"] ?? `http://localhost:${PORT}`;
+
 async function register(): Promise<string> {
   const res = await fetch(`${ORCHESTRATOR}/api/agents/register`, {
     method: "POST",
@@ -455,7 +459,7 @@ async function register(): Promise<string> {
     body: JSON.stringify({
       name: NAME,
       specialty: SPECIALTY,
-      endpoint: `http://localhost:${PORT}/claim`,
+      endpoint: `${PUBLIC_URL}/claim`,
       wallet,
     }),
     signal: AbortSignal.timeout(10_000),
@@ -587,8 +591,11 @@ async function main() {
   agentId = await register();
   console.log(`✓ ${NAME} registered · id=${agentId} · wallet=${wallet}`);
 
+  // Public URL other hosts use to reach this agent (registered with the
+  // orchestrator). Defaults to localhost for local dev grids.
   Bun.serve({
     port: PORT,
+    hostname: "0.0.0.0",
     async fetch(request) {
       const url = new URL(request.url);
       if (request.method === "POST" && url.pathname === "/claim") {
@@ -603,5 +610,5 @@ async function main() {
     },
   });
 
-  console.log(`✓ listening on http://localhost:${PORT}/claim`);
+  console.log(`✓ listening on ${PUBLIC_URL}/claim`);
 }

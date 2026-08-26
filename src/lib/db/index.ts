@@ -45,6 +45,7 @@ const DDL = [
   )`,
   `CREATE TABLE IF NOT EXISTS inquiries (
     id TEXT PRIMARY KEY,
+    identity TEXT,
     question TEXT NOT NULL,
     category TEXT,
     geography TEXT,
@@ -171,6 +172,7 @@ export async function ensureSchema() {
     "ALTER TABLE inquiries ADD COLUMN grade_cost_og REAL",
     "ALTER TABLE inquiries ADD COLUMN grade_error TEXT",
     "ALTER TABLE inquiries ADD COLUMN synthesis_json TEXT",
+    "ALTER TABLE inquiries ADD COLUMN identity TEXT",
     "ALTER TABLE opportunities ADD COLUMN anchor_root TEXT",
     "ALTER TABLE opportunities ADD COLUMN anchor_tx TEXT",
     "ALTER TABLE claims ADD COLUMN grade_mode TEXT",

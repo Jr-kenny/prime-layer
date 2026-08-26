@@ -10,6 +10,8 @@ import {
   listSupplyRecords,
   submitInquiry,
   submitPaidInquiry,
+  listMyRuns,
+  latestActiveRun,
 } from "@/lib/orchestrator/fns";
 import {
   getAccount,
@@ -56,6 +58,18 @@ const EXAMPLES = [
   "hey we are a company dealing on electricals and yesterday stocks worth 13m usd came in and we have 6 months to clear it. can you look for future partners we can meet that may be in need of these goods, not limited to only chandeliers, sockets, leds, solars etc we have a wide range of goods in stock",
 ];
 
+type RunHistoryRow = {
+  id: string;
+  question: string;
+  status: "dispatching" | "collecting" | "grading" | "complete" | "failed";
+  createdAt: string | null;
+  claimsReceived: number;
+  sourcesClustered: number;
+  complete: boolean;
+  active: boolean;
+  error?: string | null;
+};
+
 function Intelligence() {
   const [query, setQuery] = useState(
     "Which hotel chains and manufacturers are expanding or building new facilities right now?",
@@ -71,6 +85,7 @@ function Intelligence() {
   const [paying, setPaying] = useState(false);
   const [payError, setPayError] = useState<string | null>(null);
   const [walletOg, setWalletOg] = useState<number | null>(null);
+  const [history, setHistory] = useState<RunHistoryRow[]>([]);
   const pollRef = useRef<number | null>(null);
   const [privy, setPrivy] = useState<PrivyIdentityInfo>({
     authenticated: false,
@@ -122,13 +137,6 @@ function Intelligence() {
 
   const poll = useCallback((inquiryId: string) => {
     if (pollRef.current) window.clearInterval(pollRef.current);
-    // Remember the active run so a refresh / dead phone / closed tab can
-    // resume watching it instead of losing the result.
-    try {
-      window.localStorage.setItem("pl.activeInquiry", inquiryId);
-    } catch {
-      // private browsing: resume just won't survive the session
-    }
     let ticks = 0;
     pollRef.current = window.setInterval(async () => {
       ticks += 1;
@@ -137,46 +145,61 @@ function Intelligence() {
       setInquiry(state);
       if (state.status === "failed") {
         window.clearInterval(pollRef.current!);
-        try {
-          window.localStorage.removeItem("pl.activeInquiry");
-        } catch {}
         setPhase("failed");
       }
       // "complete" alone isn't enough — the synthesis pass writes the actual
       // readout right after. Keep polling briefly until it lands (or ~40s cap).
       if (state.status === "complete" && (state.synthesis || ticks > 20)) {
         window.clearInterval(pollRef.current!);
-        try {
-          window.localStorage.removeItem("pl.activeInquiry");
-        } catch {}
         setPhase("done");
+        if (identityRef.current) void refreshRunsRef.current?.();
       }
     }, 2000);
   }, []);
 
-  // Resume: on mount, if there's a remembered run still in flight, adopt it.
+  // Refs so poll can notify the history refresh without a circular dependency.
+  const identityRef = useRef(identity);
   useEffect(() => {
-    let saved: string | null = null;
-    try {
-      saved = window.localStorage.getItem("pl.activeInquiry");
-    } catch {}
-    if (!saved) return;
-    void getInquiry({ data: saved }).then((state) => {
-      if (!state) return;
-      if (state.status === "complete" || state.status === "failed") {
-        // Finished while we were away — show the finished readout, clear the flag.
-        setInquiry(state);
-        setPhase(state.status === "failed" ? "failed" : "done");
-        try {
-          window.localStorage.removeItem("pl.activeInquiry");
-        } catch {}
-      } else {
-        setPhase("running");
-        poll(saved);
+    identityRef.current = identity;
+  }, [identity]);
+  const refreshRunsRef = useRef<(() => void) | null>(null);
+
+  // Resume + history: runs belong to the account on the server. On sign-in,
+  // adopt any in-flight run (refresh / dead phone / new device) and load the
+  // workspace's run history. No browser storage involved.
+  const refreshRuns = useCallback(() => {
+    if (!identity) return;
+    void latestActiveRun({ data: { identity } }).then((activeRun) => {
+      if (!activeRun || pollRef.current) return; // already watching something
+      setPhase("running");
+      poll(activeRun.id);
+    });
+    void listMyRuns({ data: { identity } }).then((rows) => {
+      if (!rows.length) return;
+      setHistory(rows);
+      // If nothing is in flight, show the most recent finished readout so the
+      // workspace always opens with the last result they paid for.
+      if (phase === "idle") {
+        const last = rows.find((r) => r.complete);
+        if (last) {
+          void getInquiry({ data: last.id }).then((state) => {
+            if (state?.synthesis && state.readout?.length) {
+              setInquiry(state);
+              setPhase("done");
+            }
+          });
+        }
       }
     });
+  }, [identity, phase, poll]);
+
+  useEffect(() => {
+    refreshRunsRef.current = refreshRuns;
+  }, [refreshRuns]);
+  useEffect(() => {
+    refreshRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [identity]);
 
   async function run(event: React.FormEvent) {
     event.preventDefault();
@@ -325,6 +348,55 @@ function Intelligence() {
               </div>
             </form>
           </RequireAuth>
+
+          {identity && history.length > 0 && (
+            <div className="mt-5" aria-label="Recent runs">
+              <p className="label-mono text-ink-muted">Recent runs</p>
+              <ul className="mt-2 divide-y divide-border rounded-sm border border-border">
+                {history.slice(0, 6).map((row) => (
+                  <li key={row.id}>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (row.active) {
+                          setPhase("running");
+                          poll(row.id);
+                          return;
+                        }
+                        if (!row.complete) return;
+                        void getInquiry({ data: row.id }).then((state) => {
+                          if (state?.readout?.length || state?.synthesis) {
+                            setInquiry(state);
+                            setPhase("done");
+                            window.scrollTo({ top: 0, behavior: "smooth" });
+                          }
+                        });
+                      }}
+                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-slate/60"
+                    >
+                      <span className="min-w-0 flex-1 truncate text-sm text-vellum">
+                        {row.question}
+                      </span>
+                      <span
+                        className={`label-mono shrink-0 ${
+                          row.active ? "text-signal" : row.complete ? "text-verified" : "text-flag"
+                        }`}
+                      >
+                        {row.active
+                          ? "running…"
+                          : row.complete
+                            ? `${row.claimsReceived} claims · open`
+                            : "failed"}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+              <p className="mt-1.5 font-mono text-[0.6rem] text-ink-muted">
+                Runs are kept on your account — finished readouts are anchored to 0G Storage.
+              </p>
+            </div>
+          )}
 
           {paywall && (
             <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">

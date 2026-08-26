@@ -49,6 +49,7 @@ export const submitInquiry = createServerFn({ method: "POST" })
 
     await db.insert(inquiries).values({
       id,
+      identity: data.identity ?? null,
       question: data.question,
       status: "dispatching",
       createdAt: ts,
@@ -92,6 +93,7 @@ export const submitPaidInquiry = createServerFn({ method: "POST" })
 
     await db.insert(inquiries).values({
       id,
+      identity: data.identity,
       question: data.question,
       status: "dispatching",
       createdAt: ts,
@@ -148,6 +150,57 @@ export const getInquiry = createServerFn({ method: "POST" })
       error: row.error,
       windowSeconds: SOURCING_WINDOW_SECONDS,
     };
+  });
+
+const runsQuerySchema = z.object({
+  identity: z.string().min(3).max(120),
+});
+
+/**
+ * Run history for a signed-in workspace — the durable record. Runs are
+ * owned by the account server-side; finished readouts additionally carry
+ * their 0G Storage anchor, so nothing depends on any one browser.
+ */
+export const listMyRuns = createServerFn({ method: "POST" })
+  .validator((input: unknown) => runsQuerySchema.parse(input))
+  .handler(async ({ data }) => {
+    await ensureSchema();
+    const rows = await db
+      .select()
+      .from(inquiries)
+      .where(eq(inquiries.identity, data.identity))
+      .orderBy(desc(inquiries.createdAt))
+      .limit(25);
+    return rows.map((row) => ({
+      id: row.id,
+      question: row.question,
+      status: row.status as "dispatching" | "collecting" | "grading" | "complete" | "failed",
+      createdAt: row.createdAt,
+      claimsReceived: row.claimsReceived ?? 0,
+      sourcesClustered: row.sourcesClustered ?? 0,
+      complete: row.status === "complete",
+      active:
+        row.status === "dispatching" || row.status === "collecting" || row.status === "grading",
+      error: row.error,
+    }));
+  });
+
+/** The workspace's most recent in-flight run, if any (resume after refresh / device switch). */
+export const latestActiveRun = createServerFn({ method: "POST" })
+  .validator((input: unknown) => runsQuerySchema.parse(input))
+  .handler(async ({ data }) => {
+    await ensureSchema();
+    const [row] = await db
+      .select()
+      .from(inquiries)
+      .where(eq(inquiries.identity, data.identity))
+      .orderBy(desc(inquiries.createdAt))
+      .limit(1);
+    if (!row) return null;
+    const active =
+      row.status === "dispatching" || row.status === "collecting" || row.status === "grading";
+    if (!active) return null;
+    return { id: row.id };
   });
 
 export const listLiveAgents = createServerFn({ method: "POST" }).handler(async () => {

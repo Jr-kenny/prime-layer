@@ -24,6 +24,8 @@ export const supplyRecords = sqliteTable("supply_records", {
 
 export const inquiries = sqliteTable("inquiries", {
   id: text("id").primaryKey(),
+  /** Workspace account identity that owns this run (null for guest runs). */
+  identity: text("identity"),
   question: text("question").notNull(),
   category: text("category"),
   geography: text("geography"),

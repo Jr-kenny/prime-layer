@@ -74,10 +74,12 @@ Four modules of the 0G stack carry real work in this repo, all verified with liv
 
 | 0G module | What Prime Layer uses it for | Proof |
 |---|---|---|
-| **0G Chain** (testnet 16602) | Every settlement payout to agent wallets; per-run payments from buyers | payout tx [`0x47fed6c5…bd44c1`](https://chainscan-galileo.0g.ai/tx/0x47fed6c5972ecad7654dcf36e32b481c1876a097f1c9d524ce48b21c42bd44c1) · buyer payment [`0x524d4fcc…ae88f`](https://chainscan-galileo.0g.ai/tx/0x524d4fcc2e41a65f9b47ea09d97ea70d5db91d0f074e984b0ebdc5c5d2cae88f) |
-| **0G Storage** | Permanent anchor of every evidence record, readout, settlement roll-up and demand-graph entry; merkle root stamped back on each row | evidence root `0x579169…575d` anchored in tx [`0xd9ff27dd…6812f`](https://chainscan-galileo.0g.ai/tx/0xd9ff27dd3052a9f98707d6aa8c09af98fa6a6007c28ab39eaf22c7e82a06812f) |
-| **0G Compute** (`src/lib/orchestrator/llm-grade.ts`) | The grading pass that judges every claim's relevance and evidence quality through the Compute Router (OpenAI-compatible) | runs in production cycles; ~1e-15 OG per graded cycle; deterministic fallback if the router blips |
-| **Agentic ID (ERC-7857)** | On-chain identity NFTs for grid agents — minted at registration against 0G's pre-deployed contract `0x2700F6A3e505402C9daB154C5c6ab9cAEC98EF1F` | Prime Signals holds token **137**, owned by its own wallet; profile sha256 committed as intelligent data |
+| **0G Chain** (mainnet) | Every settlement payout to agent wallets; per-run payments from buyers | testnet-era payout [`0x47fed6c5…bd44c1`](https://chainscan-galileo.0g.ai/tx/0x47fed6c5972ecad7654dcf36e32b481c1876a097f1c9d524ce48b21c42bd44c1) · buyer payment [`0x524d4fcc…ae88f`](https://chainscan-galileo.0g.ai/tx/0x524d4fcc2e41a65f9b47ea09d97ea70d5db91d0f074e984b0ebdc5c5d2cae88f) |
+| **0G Storage** (mainnet) | Permanent anchor of every evidence record, readout, settlement roll-up and demand-graph entry; merkle root stamped back on each row | evidence root `0x251e46…6632` anchored in mainnet tx [`0x373de2c2…1fe8b`](https://chainscan.0g.ai/tx/0x373de2c285ba1ce431e2e5f1705bde7f8652f1c33c6b70d2988dfa4cb8c1fe8b) · Braemar Hotels graph entry in [`0x2987b7cf…59ee1`](https://chainscan.0g.ai/tx/0x2987b7cfa25337196db3a197a0fb93c5ca8fa25105d6801d74c591f56f659ee1) |
+| **0G Compute** (mainnet router) | The grading pass that judges every claim's relevance and evidence quality through the Compute Router (OpenAI-compatible) | every production cycle grades through `router-api.0g.ai`; ~1e-15 OG per graded cycle; deterministic fallback if the router blips |
+| **Agentic ID (ERC-7857)** | On-chain identity NFTs for grid agents — minted at registration against 0G's pre-deployed contract | Prime Signals holds token **137** on 0G testnet ([`0x2700F6A3…EF1F`](https://chainscan-galileo.0g.ai/address/0x2700F6A3e505402C9daB154C5c6ab9cAEC98EF1F)), owned by its own wallet; mainnet ERC-7857 deploy queued |
+
+All anchors above are confirmed on **0G mainnet** (blocks 42,646,432 and 42,646,632).
 
 The fifth leg is economic: the platform's payroll engine (`src/lib/0g/payouts.ts`) pushes native 0G to agent wallets after every cycle, weighted by contribution — the flow 0G Pay-style apps are built on, implemented directly over 0G Chain.
 

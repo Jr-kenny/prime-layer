@@ -86,6 +86,7 @@ function Intelligence() {
   const [payError, setPayError] = useState<string | null>(null);
   const [walletOg, setWalletOg] = useState<number | null>(null);
   const [history, setHistory] = useState<RunHistoryRow[]>([]);
+  const [showRecent, setShowRecent] = useState(false);
   const pollRef = useRef<number | null>(null);
   const [privy, setPrivy] = useState<PrivyIdentityInfo>({
     authenticated: false,
@@ -341,10 +342,10 @@ function Intelligence() {
                     ? "Sending your request…"
                     : phase === "running"
                       ? inquiry?.status === "grading"
-                        ? "Grading claims…"
+                        ? "Checking the evidence…"
                         : inquiry?.status === "dispatching"
-                          ? "Dispatching to the grid…"
-                          : "Agents researching — window open…"
+                          ? "Contacting our agents…"
+                          : "Researching your request…"
                       : "One request. Sourced, graded, cited."}
                 </p>
                 <button
@@ -367,52 +368,6 @@ function Intelligence() {
               </div>
             </form>
           </RequireAuth>
-
-          {identity && history.length > 0 && (
-            <div className="mt-5" aria-label="Recent runs">
-              <p className="label-mono text-ink-muted">Recent runs</p>
-              <ul className="mt-2 divide-y divide-border rounded-sm border border-border">
-                {history.slice(0, 6).map((row) => (
-                  <li key={row.id}>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (row.active) {
-                          setPhase("running");
-                          poll(row.id);
-                          return;
-                        }
-                        if (!row.complete) return;
-                        void getInquiry({ data: row.id }).then((state) => {
-                          if (state?.readout?.length || state?.synthesis) {
-                            setInquiry(state);
-                            setPhase("done");
-                            window.scrollTo({ top: 0, behavior: "smooth" });
-                          }
-                        });
-                      }}
-                      className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors hover:bg-slate/60"
-                    >
-                      <span className="min-w-0 flex-1 truncate text-sm text-vellum">
-                        {row.question}
-                      </span>
-                      <span
-                        className={`label-mono shrink-0 ${
-                          row.active ? "text-signal" : row.complete ? "text-verified" : "text-flag"
-                        }`}
-                      >
-                        {row.active
-                          ? "running…"
-                          : row.complete
-                            ? `${row.claimsReceived} claims · open`
-                            : "failed"}
-                      </span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
 
           {paywall && (
             <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
@@ -570,9 +525,67 @@ function Intelligence() {
                 <div>
                   <h2 className="mt-2 font-display text-2xl">What came back</h2>
                 </div>
-                {phase === "done" && <StatusPill tone="verified" label="Evidence attached" />}
-                {phase === "failed" && <StatusPill tone="flagged" label="Run failed" />}
+                <div className="flex items-center gap-3">
+                  {identity && history.some((r) => r.complete) && (
+                    <button
+                      type="button"
+                      onClick={() => setShowRecent((v) => !v)}
+                      className="rounded-sm border border-ink-border px-3.5 py-1.5 text-xs font-medium text-vellum transition-colors hover:border-signal hover:text-signal"
+                    >
+                      {showRecent ? "Hide recent" : "Recent"}
+                    </button>
+                  )}
+                  {phase === "done" && <StatusPill tone="verified" label="Evidence attached" />}
+                  {phase === "failed" && <StatusPill tone="flagged" label="Run failed" />}
+                </div>
               </div>
+
+              {showRecent && (
+                <ul className="mt-4 divide-y divide-border rounded-sm border border-border">
+                  {history.map((row) => (
+                    <li key={row.id}>
+                      <button
+                        type="button"
+                        disabled={!row.complete || row.id === inquiry?.id}
+                        onClick={() => {
+                          void getInquiry({ data: row.id }).then((state) => {
+                            if (state?.readout?.length || state?.synthesis) {
+                              setInquiry(state);
+                              setPhase("done");
+                              setShowRecent(false);
+                              window.scrollTo({ top: 0, behavior: "smooth" });
+                            }
+                          });
+                        }}
+                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors enabled:hover:bg-slate/60 disabled:opacity-50"
+                      >
+                        <span className="min-w-0 flex-1 truncate text-sm text-vellum">
+                          {row.question}
+                        </span>
+                        <span
+                          className={`label-mono shrink-0 ${
+                            row.active
+                              ? "text-signal"
+                              : row.complete
+                                ? row.id === inquiry?.id
+                                  ? "text-ink-muted"
+                                  : "text-verified"
+                                : "text-flag"
+                          }`}
+                        >
+                          {row.active
+                            ? "in progress"
+                            : row.id === inquiry?.id
+                              ? "showing now"
+                              : row.complete
+                                ? "view"
+                                : "didn't finish"}
+                        </span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
 
               {phase === "done" && synthesis && synthesis.recommendations.length > 0 ? (
                 <div className="mt-5 space-y-5">

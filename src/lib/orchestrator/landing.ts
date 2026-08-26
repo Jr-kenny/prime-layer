@@ -1,14 +1,16 @@
 import { createServerFn } from "@tanstack/react-start";
 
 /**
- * Public landing-page stats + recent evidence. Real data only — if the
- * network is young and numbers are small, we show the small true number.
+ * Public landing-page stats. AGGREGATE ONLY — no row-level data, no recent
+ * activity, nothing that reveals what buyers are searching for. Buyer
+ * queries are confidential; detailed evidence lives behind sign-in in the
+ * workspace, where it belongs.
  */
 export const getLandingStats = createServerFn({ method: "POST" }).handler(async () => {
   try {
     const { db, ensureSchema } = await import("@/lib/db");
     const { agents, evidenceRecords, inquiries, opportunities } = await import("@/lib/db/schema");
-    const { count, desc, eq } = await import("drizzle-orm");
+    const { count, eq } = await import("drizzle-orm");
     await ensureSchema();
 
     const [evidence] = await db
@@ -23,41 +25,14 @@ export const getLandingStats = createServerFn({ method: "POST" }).handler(async 
       .from(agents)
       .where(eq(agents.status, "online"));
 
-    const recent = await db
-      .select({
-        company: evidenceRecords.company,
-        claim: evidenceRecords.claim,
-        source: evidenceRecords.source,
-        confidence: opportunities.confidence,
-        observed: evidenceRecords.observed,
-      })
-      .from(evidenceRecords)
-      .leftJoin(opportunities, eq(opportunities.inquiryId, evidenceRecords.inquiryId))
-      .orderBy(desc(evidenceRecords.createdAt))
-      .limit(3);
-
     return {
       evidenceVerified: Number(evidence?.n ?? 0),
       sourcesTotal: Number(sources?.n ?? 0),
       opportunities: Number(opps?.n ?? 0),
       runs: Number(runs?.n ?? 0),
       agentsOnline: Number(agentsOnline?.n ?? 0),
-      recent: recent.map((r) => ({
-        company: r.company,
-        claim: r.claim.length > 90 ? r.claim.slice(0, 87) + "…" : r.claim,
-        source: r.source,
-        confidence: r.confidence ?? null,
-        observed: r.observed,
-      })),
     };
   } catch {
-    return {
-      evidenceVerified: 0,
-      sourcesTotal: 0,
-      opportunities: 0,
-      runs: 0,
-      agentsOnline: 0,
-      recent: [],
-    };
+    return { evidenceVerified: 0, sourcesTotal: 0, opportunities: 0, runs: 0, agentsOnline: 0 };
   }
 });

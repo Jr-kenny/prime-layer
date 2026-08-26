@@ -134,6 +134,17 @@ export const getInquiry = createServerFn({ method: "POST" })
     await ensureSchema();
     const [row] = await db.select().from(inquiries).where(eq(inquiries.id, id));
     if (!row) return null;
+    // Orphaned-cycle rescue: the run dispatched but the submitting function
+    // was killed before grading (serverless timeout). The UI is still
+    // polling — use that tick to resume the cycle.
+    if (
+      row.status === "collecting" &&
+      row.windowClosesAt &&
+      Date.now() > Date.parse(row.windowClosesAt) + 30_000
+    ) {
+      const submitUrl = process.env["PUBLIC_SUBMIT_URL"] ?? "http://localhost:8081";
+      void runInquiry(id, `${submitUrl}/api/claims/submit`);
+    }
     return {
       id: row.id,
       question: row.question,

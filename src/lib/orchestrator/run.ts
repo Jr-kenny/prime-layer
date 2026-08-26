@@ -93,6 +93,18 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
   try {
     const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
     if (!inquiry) return;
+    // Resume support: if this run already dispatched (window opened) and the
+    // window has closed, skip straight to grading — the original function may
+    // have been killed mid-wait (serverless). Claims are already in the DB.
+    if (
+      inquiry.status === "collecting" &&
+      inquiry.windowClosesAt &&
+      Date.now() > Date.parse(inquiry.windowClosesAt)
+    ) {
+      console.log(`resuming orphaned cycle ${inquiryId} — window closed, grading now`);
+      await gradeAndSynthesize(inquiryId);
+      return;
+    }
 
     const scope = extractScope(inquiry.question);
     await db

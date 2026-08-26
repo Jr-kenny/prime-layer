@@ -155,6 +155,13 @@ function Intelligence() {
         setPhase("done");
         if (identityRef.current) void refreshRunsRef.current?.();
       }
+      // A healthy cycle finishes in ~6 min. Past 12, the run is dead — stop
+      // watching instead of spinning forever.
+      if (ticks > 360) {
+        window.clearInterval(pollRef.current!);
+        setPhase("failed");
+        if (identityRef.current) void refreshRunsRef.current?.();
+      }
     }, 2000);
   }, []);
 

@@ -157,8 +157,9 @@ const runsQuerySchema = z.object({
 });
 
 // A run older than this is considered abandoned (crashed cycle), never
-// resumable — generous against the ~1h maximum sourcing window.
-const ACTIVE_RUN_WINDOW_MS = 3 * 60 * 60 * 1000;
+// resumable. The sourcing window is 5 min; a completed cycle is well under
+// 15. Serverless cold-starts can't exceed this either.
+const ACTIVE_RUN_WINDOW_MS = 15 * 60 * 1000;
 
 function isActiveStatus(status: string): boolean {
   return (

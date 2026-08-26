@@ -15,7 +15,14 @@ import { agenticIdConfig, mintAgentIdentity } from "@/lib/0g/agentic-id";
 const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: {
+      "content-type": "application/json",
+      // Agents run on their own hosts (AWS, VPS, laptops) — browser-less
+      // fetches don't need this, but it costs nothing and keeps the grid
+      // open to any agent dashboard that wants to call us from a page.
+      "access-control-allow-origin": "*",
+      "access-control-allow-headers": "content-type",
+    },
   });
 
 const registerSchema = z.object({
@@ -55,6 +62,16 @@ const submitSchema = z.object({
 export async function handleConnectorApi(request: Request): Promise<Response> {
   const url = new URL(request.url);
 
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        "access-control-allow-origin": "*",
+        "access-control-allow-methods": "GET, POST, OPTIONS",
+        "access-control-allow-headers": "content-type",
+      },
+    });
+  }
   if (request.method === "POST" && url.pathname === "/api/agents/register") {
     return registerAgent(request);
   }

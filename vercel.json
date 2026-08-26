@@ -1,0 +1,5 @@
+{
+  "functions": {
+    "**/route-handler.js": { "maxDuration": 300 }
+  }
+}

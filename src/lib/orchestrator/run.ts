@@ -33,7 +33,7 @@ import { anchorRecord } from "@/lib/0g/evidence-anchor";
  */
 export const SOURCING_WINDOW_SECONDS = Math.min(
   3600,
-  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 300)),
+  Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 90)),
 );
 
 export type ResearchCommand = {

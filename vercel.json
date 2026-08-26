@@ -1,5 +1,5 @@
 {
   "functions": {
-    "**/route-handler.js": { "maxDuration": 300 }
+    "__server.func": { "maxDuration": 300 }
   }
 }

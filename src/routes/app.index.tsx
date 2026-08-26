@@ -122,6 +122,13 @@ function Intelligence() {
 
   const poll = useCallback((inquiryId: string) => {
     if (pollRef.current) window.clearInterval(pollRef.current);
+    // Remember the active run so a refresh / dead phone / closed tab can
+    // resume watching it instead of losing the result.
+    try {
+      window.localStorage.setItem("pl.activeInquiry", inquiryId);
+    } catch {
+      // private browsing: resume just won't survive the session
+    }
     let ticks = 0;
     pollRef.current = window.setInterval(async () => {
       ticks += 1;
@@ -130,15 +137,45 @@ function Intelligence() {
       setInquiry(state);
       if (state.status === "failed") {
         window.clearInterval(pollRef.current!);
+        try {
+          window.localStorage.removeItem("pl.activeInquiry");
+        } catch {}
         setPhase("failed");
       }
       // "complete" alone isn't enough — the synthesis pass writes the actual
       // readout right after. Keep polling briefly until it lands (or ~40s cap).
       if (state.status === "complete" && (state.synthesis || ticks > 20)) {
         window.clearInterval(pollRef.current!);
+        try {
+          window.localStorage.removeItem("pl.activeInquiry");
+        } catch {}
         setPhase("done");
       }
     }, 2000);
+  }, []);
+
+  // Resume: on mount, if there's a remembered run still in flight, adopt it.
+  useEffect(() => {
+    let saved: string | null = null;
+    try {
+      saved = window.localStorage.getItem("pl.activeInquiry");
+    } catch {}
+    if (!saved) return;
+    void getInquiry({ data: saved }).then((state) => {
+      if (!state) return;
+      if (state.status === "complete" || state.status === "failed") {
+        // Finished while we were away — show the finished readout, clear the flag.
+        setInquiry(state);
+        setPhase(state.status === "failed" ? "failed" : "done");
+        try {
+          window.localStorage.removeItem("pl.activeInquiry");
+        } catch {}
+      } else {
+        setPhase("running");
+        poll(saved);
+      }
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function run(event: React.FormEvent) {

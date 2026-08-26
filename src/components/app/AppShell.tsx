@@ -1,63 +1,116 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { Suspense, lazy, useState, type ReactNode } from "react";
+import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
 import { Bot, Boxes, Code2, Coins, FileSearch, GitBranch, Radar, Menu, X } from "lucide-react";
 import { WorkspaceAuthShell } from "@/components/app/WorkspaceAuthShell";
+import { getNavCounts } from "@/lib/orchestrator/nav-counts";
+
+type NavNote = string | number | null;
 
 const workspaceNav = [
-  { to: "/app", label: "Intelligence", icon: Radar, exact: true, note: "command" },
+  { to: "/app", label: "Intelligence", icon: Radar, exact: true, note: "command" as NavNote },
   {
     to: "/app/demand-graph",
     label: "Demand Graph",
     icon: GitBranch,
     exact: false,
-    note: "live",
+    note: "live" as NavNote,
   },
-  { to: "/app/supply", label: "Supply", icon: Boxes, exact: false, note: "3" },
-  { to: "/app/evidence", label: "Evidence", icon: FileSearch, exact: false, note: "18" },
+  { to: "/app/supply", label: "Supply", icon: Boxes, exact: false, note: null as NavNote },
+  { to: "/app/evidence", label: "Evidence", icon: FileSearch, exact: false, note: null as NavNote },
 ] as const;
 
 const networkNav = [
-  { to: "/app/agents", label: "Agents", icon: Bot, exact: false, note: "6" },
-  { to: "/app/contributions", label: "Contributions", icon: Coins, exact: false, note: "earn" },
-  { to: "/app/developers", label: "Developer", icon: Code2, exact: false, note: "spec" },
+  { to: "/app/agents", label: "Agents", icon: Bot, exact: false, note: null as NavNote },
+  {
+    to: "/app/contributions",
+    label: "Contributions",
+    icon: Coins,
+    exact: false,
+    note: "earn" as NavNote,
+  },
+  { to: "/app/developers", label: "Developer", icon: Code2, exact: false, note: "spec" as NavNote },
 ] as const;
+
+/** Live counts from the server; applied to matching nav items by path. */
+function useLiveNotes() {
+  const [notes, setNotes] = useState<Record<string, NavNote>>({});
+  useEffect(() => {
+    let cancelled = false;
+    void getNavCounts().then((c) => {
+      if (!cancelled && c) {
+        setNotes({
+          "/app/supply": c.supply > 0 ? c.supply : "add yours",
+          "/app/evidence": c.evidence > 0 ? c.evidence : "—",
+          "/app/agents": c.agents > 0 ? c.agents : "—",
+        });
+      }
+    });
+    const t = window.setInterval(() => {
+      void getNavCounts().then((c) => {
+        if (c)
+          setNotes({
+            "/app/supply": c.supply > 0 ? c.supply : "add yours",
+            "/app/evidence": c.evidence > 0 ? c.evidence : "—",
+            "/app/agents": c.agents > 0 ? c.agents : "—",
+          });
+      });
+    }, 60_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(t);
+    };
+  }, []);
+  return notes;
+}
 
 function NavLinkList({
   items,
+  liveNotes,
   onNavigate,
 }: {
-  items: readonly { to: string; label: string; icon: typeof Radar; exact: boolean; note: string }[];
+  items: readonly {
+    to: string;
+    label: string;
+    icon: typeof Radar;
+    exact: boolean;
+    note: NavNote;
+  }[];
+  liveNotes: Record<string, NavNote>;
   onNavigate?: (() => void) | undefined;
 }) {
   return (
     <nav className="app-nav-list">
-      {items.map((item) => (
-        <Link
-          key={item.to}
-          to={item.to}
-          activeOptions={{ exact: item.exact }}
-          onClick={onNavigate}
-          className="app-nav-link"
-        >
-          <span className="app-nav-icon">
-            <item.icon className="size-4" aria-hidden />
-          </span>
-          <span className="min-w-0 flex-1">{item.label}</span>
-          <span className="app-nav-note">{item.note}</span>
-        </Link>
-      ))}
+      {items.map((item) => {
+        const note = item.to in liveNotes ? liveNotes[item.to] : item.note;
+        return (
+          <Link
+            key={item.to}
+            to={item.to}
+            activeOptions={{ exact: item.exact }}
+            onClick={onNavigate}
+            className="app-nav-link"
+          >
+            <span className="app-nav-icon">
+              <item.icon className="size-4" aria-hidden />
+            </span>
+            <span className="min-w-0 flex-1">{item.label}</span>
+            {note !== null && note !== "" && <span className="app-nav-note">{note}</span>}
+          </Link>
+        );
+      })}
     </nav>
   );
 }
 
 function NavList({ onNavigate }: { onNavigate?: () => void }) {
+  const liveNotes = useLiveNotes();
   return (
     <div className="app-nav-stack">
       <p className="app-nav-caption">Workspace</p>
-      <NavLinkList items={workspaceNav} onNavigate={onNavigate} />
+      <NavLinkList items={workspaceNav} liveNotes={liveNotes} onNavigate={onNavigate} />
       <div className="app-nav-later">
         <p className="app-nav-caption">Network layer</p>
-        <NavLinkList items={networkNav} onNavigate={onNavigate} />
+        <NavLinkList items={networkNav} liveNotes={liveNotes} onNavigate={onNavigate} />
       </div>
     </div>
   );

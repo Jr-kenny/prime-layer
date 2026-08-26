@@ -3,6 +3,7 @@ import { db, ensureSchema, nowIso, newId } from "@/lib/db";
 import { agents, claims, dispatchAcks, inquiries } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { agenticIdConfig, mintAgentIdentity } from "@/lib/0g/agentic-id";
+import { runInquiry } from "@/lib/orchestrator/run";
 
 /**
  * Connector protocol — the HTTP surface external agents talk to.
@@ -77,6 +78,19 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
   }
   if (request.method === "POST" && url.pathname === "/api/claims/submit") {
     return submitClaims(request);
+  }
+  if (request.method === "POST" && url.pathname === "/api/cycles/resume") {
+    // Kick a stalled cycle: re-enters the orchestrator, which grades and
+    // synthesizes when the sourcing window has closed. Safe to call repeatedly.
+    let body: { inquiry_id?: string } = {};
+    try {
+      body = (await request.json()) as { inquiry_id?: string };
+    } catch {}
+    const id = body.inquiry_id;
+    if (!id) return json({ error: "inquiry_id required" }, 400);
+    const submitUrl = `${url.origin}/api/claims/submit`;
+    void runInquiry(id, submitUrl).catch(() => undefined);
+    return json({ ok: true, resumed: id });
   }
   if (request.method === "GET" && url.pathname === "/api/health") {
     return json({ ok: true, service: "prime-layer-orchestrator" });

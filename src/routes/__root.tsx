@@ -90,7 +90,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { property: "og:title", content: "Prime Intelligence Network" },
       {
         property: "og:description",
-        content: "We don't find leads. We detect markets moving.",
+        content:
+          "Your next customers leave clues everywhere. We bring you the ones worth acting on.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

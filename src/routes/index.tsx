@@ -4,13 +4,16 @@ import { EvidenceLedger } from "@/components/site/EvidenceLedger";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Prime Layer · Detect markets moving" },
+      { title: "Prime Layer · Your next customers leave clues everywhere" },
       {
         name: "description",
         content:
           "Tell us what you sell. We find the companies developing a real reason to buy it, with the evidence, confidence, and timing behind every match.",
       },
-      { property: "og:title", content: "Prime Layer · Detect markets moving" },
+      {
+        property: "og:title",
+        content: "Prime Layer · Your next customers leave clues everywhere",
+      },
       {
         property: "og:description",
         content:
@@ -27,14 +30,14 @@ function Home() {
       <section className="mx-auto max-w-6xl px-5 py-16 sm:px-8 sm:py-24">
         <p className="label-mono text-signal">Demand intelligence</p>
         <h1 className="mt-5 max-w-3xl font-display text-4xl leading-[1.05] sm:text-6xl">
-          We don't find leads.
+          Your next customers leave clues everywhere.
           <br />
-          We detect markets moving.
+          We bring you the ones worth acting on.
         </h1>
         <p className="mt-6 max-w-xl text-base leading-relaxed text-ink-muted sm:text-lg">
-          Tell the system what you sell. It returns the companies developing a real reason to buy
-          it, such as a hotel opening 150 rooms or a chain signing new sites, before they have said
-          so publicly.
+          Say what you sell. Prime Layer reads filings, announcements and open records to surface
+          the companies already drifting toward a purchase like yours — each name backed by the
+          evidence, graded and timed.
         </p>
 
         <div className="mt-8 flex flex-wrap items-center gap-4">

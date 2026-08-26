@@ -156,6 +156,23 @@ const runsQuerySchema = z.object({
   identity: z.string().min(3).max(120),
 });
 
+// A run older than this is considered abandoned (crashed cycle), never
+// resumable — generous against the ~1h maximum sourcing window.
+const ACTIVE_RUN_WINDOW_MS = 3 * 60 * 60 * 1000;
+
+function isActiveStatus(status: string): boolean {
+  return (
+    status === "dispatching" || status === "collecting" || status === "grading"
+  );
+}
+function isResumable(status: string, createdAt: string | null): boolean {
+  return (
+    isActiveStatus(status) &&
+    !!createdAt &&
+    Date.now() - Date.parse(createdAt) < ACTIVE_RUN_WINDOW_MS
+  );
+}
+
 /**
  * Run history for a signed-in workspace — the durable record. Runs are
  * owned by the account server-side; finished readouts additionally carry
@@ -179,8 +196,7 @@ export const listMyRuns = createServerFn({ method: "POST" })
       claimsReceived: row.claimsReceived ?? 0,
       sourcesClustered: row.sourcesClustered ?? 0,
       complete: row.status === "complete",
-      active:
-        row.status === "dispatching" || row.status === "collecting" || row.status === "grading",
+      active: isResumable(row.status, row.createdAt),
       error: row.error,
     }));
   });
@@ -197,9 +213,7 @@ export const latestActiveRun = createServerFn({ method: "POST" })
       .orderBy(desc(inquiries.createdAt))
       .limit(1);
     if (!row) return null;
-    const active =
-      row.status === "dispatching" || row.status === "collecting" || row.status === "grading";
-    if (!active) return null;
+    if (!isResumable(row.status, row.createdAt)) return null;
     return { id: row.id };
   });
 

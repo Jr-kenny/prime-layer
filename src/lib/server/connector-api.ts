@@ -3,7 +3,7 @@ import { db, ensureSchema, nowIso, newId } from "@/lib/db";
 import { agents, claims, dispatchAcks, inquiries } from "@/lib/db/schema";
 import { eq } from "drizzle-orm";
 import { agenticIdConfig, mintAgentIdentity } from "@/lib/0g/agentic-id";
-import { runInquiry } from "@/lib/orchestrator/run";
+import { gradeAndSynthesize, runInquiry } from "@/lib/orchestrator/run";
 
 /**
  * Connector protocol — the HTTP surface external agents talk to.
@@ -80,20 +80,85 @@ export async function handleConnectorApi(request: Request): Promise<Response> {
     return submitClaims(request);
   }
   if (request.method === "POST" && url.pathname === "/api/cycles/resume") {
-    // Kick a stalled cycle: re-enters the orchestrator, which grades and
-    // synthesizes when the sourcing window has closed. Safe to call repeatedly.
+    // Kick a stalled cycle — AWAITED inside this request so Vercel keeps the
+    // function alive until grading finishes. Safe to call repeatedly.
     let body: { inquiry_id?: string } = {};
     try {
       body = (await request.json()) as { inquiry_id?: string };
-    } catch {}
+    } catch {
+      // ignore malformed JSON — body stays {}
+    }
     const id = body.inquiry_id;
     if (!id) return json({ error: "inquiry_id required" }, 400);
     const submitUrl = `${url.origin}/api/claims/submit`;
-    void runInquiry(id, submitUrl).catch(() => undefined);
-    return json({ ok: true, resumed: id });
+    try {
+      // runInquiry handles the window-closed → grade path.
+      await runInquiry(id, submitUrl);
+      // Defensive: if runInquiry returned early (e.g. still collecting but
+      // window just closed between checks), force grading synchronously.
+      const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+      if (
+        inquiry?.status === "collecting" &&
+        inquiry.windowClosesAt &&
+        Date.now() > Date.parse(inquiry.windowClosesAt)
+      ) {
+        await gradeAndSynthesize(id);
+      }
+      const [fresh] = await db.select().from(inquiries).where(eq(inquiries.id, id));
+      return json({ ok: true, resumed: id, status: fresh?.status ?? "unknown" });
+    } catch (err) {
+      console.error("resume failed:", err);
+      return json(
+        { ok: false, error: err instanceof Error ? err.message : "resume failed", resumed: id },
+        500,
+      );
+    }
   }
   if (request.method === "GET" && url.pathname === "/api/health") {
     return json({ ok: true, service: "prime-layer-orchestrator" });
+  }
+  if (
+    (request.method === "GET" || request.method === "POST") &&
+    (url.pathname === "/api/cron/sweep" || url.pathname === "/api/cycles/sweep")
+  ) {
+    // Optional cron secret — if set, require it.
+    const expected = process.env["CRON_SECRET"]?.trim();
+    if (expected) {
+      const got = request.headers
+        .get("authorization")
+        ?.replace(/^Bearer\s+/, "")
+        ?.trim();
+      if (got !== expected) return json({ error: "unauthorized" }, 401);
+    }
+    await ensureSchema();
+    const allCollecting = await db
+      .select()
+      .from(inquiries)
+      .where(eq(inquiries.status, "collecting"));
+    const now = Date.now();
+    const sweepable = allCollecting.filter(
+      (r) => r.windowClosesAt && now > Date.parse(r.windowClosesAt),
+    );
+    const results: { id: string; status: string; claims?: number; error?: string }[] = [];
+    for (const row of sweepable) {
+      try {
+        await gradeAndSynthesize(row.id);
+        const [fresh] = await db.select().from(inquiries).where(eq(inquiries.id, row.id));
+        const [count] = await db
+          .select()
+          .from(claims)
+          .where(eq(claims.inquiryId, row.id))
+          .then((rows) => [{ count: rows.length }]);
+        results.push({ id: row.id, status: fresh?.status ?? "unknown", claims: count.count });
+      } catch (err) {
+        results.push({
+          id: row.id,
+          status: "failed",
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    return json({ ok: true, checked: allCollecting.length, swept: results.length, results });
   }
   return json({ error: "Not found" }, 404);
 }

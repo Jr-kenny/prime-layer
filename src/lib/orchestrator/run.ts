@@ -86,16 +86,23 @@ function extractScope(question: string): { category?: string; geography?: string
 }
 
 /**
- * Full inquiry lifecycle. Fire-and-forget from the request path:
- * dispatch → collect (bounded window) → grade → synthesize → settle.
+ * Full inquiry lifecycle — serverless-safe split:
+ *  dispatch → return immediately (window stays open) → grade triggered later
+ *  by polling or /api/cycles/resume. No long blocking wait inside the
+ *  dispatch request; grading runs inside the request that triggers it.
  */
 export async function runInquiry(inquiryId: string, submitUrl: string) {
   try {
     const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
     if (!inquiry) return;
-    // Resume support: if this run already dispatched (window opened) and the
-    // window has closed, skip straight to grading — the original function may
-    // have been killed mid-wait (serverless). Claims are already in the DB.
+
+    // Idempotency: terminal states never re-enter.
+    if (inquiry.status === "complete" || inquiry.status === "failed") return;
+
+    // Resume path — window closed, claims already in DB. This is the ONLY
+    // path that does heavy work (grade+synthesize). It runs AWAITED inside
+    // the caller (getInquiry poll or /api/cycles/resume) so Vercel keeps the
+    // function alive until it finishes.
     if (
       inquiry.status === "collecting" &&
       inquiry.windowClosesAt &&
@@ -106,6 +113,14 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
       return;
     }
 
+    // Already dispatched and still collecting — don't re-dispatch. The window
+    // is open and agents are submitting; grading will happen after it closes.
+    if (inquiry.status === "collecting") return;
+    if (inquiry.status === "grading") return;
+
+    // Fresh dispatch path (status === dispatching). Do NOT block waiting for
+    // claims — set the window, fire commands, and return. The UI poll will
+    // trigger grading once the window closes (or early if all agents respond).
     const scope = extractScope(inquiry.question);
     await db
       .update(inquiries)
@@ -121,8 +136,6 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
     const allAgents = await db.select().from(agents);
     const dispatched = agentsOnGrid(allAgents);
 
-    // agentsMatched now means "agents the command went out to" — the whole
-    // online grid. Selection is the agents' job, not ours.
     await db
       .update(inquiries)
       .set({ agentsMatched: dispatched.length, updatedAt: nowIso() })
@@ -177,27 +190,9 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
         .where(eq(agents.id, agent.id));
     });
 
-    // Bounded collection loop — early-exit when every dispatched agent has
-    // responded (claims, an explicit decline, or silence until the window closes).
-    const deadline = Date.now() + SOURCING_WINDOW_SECONDS * 1000;
-    const dispatchedIds = dispatched.map((a) => a.id);
-    while (Date.now() < deadline) {
-      await new Promise((r) => setTimeout(r, 2000));
-      const [responded, acks] = await Promise.all([
-        db.select({ agentId: claims.agentId }).from(claims).where(eq(claims.inquiryId, inquiryId)),
-        db
-          .select({ agentId: dispatchAcks.agentId })
-          .from(dispatchAcks)
-          .where(eq(dispatchAcks.inquiryId, inquiryId)),
-      ]);
-      const respondedIds = new Set([
-        ...responded.map((r) => r.agentId),
-        ...acks.map((a) => a.agentId),
-      ]);
-      if (dispatchedIds.every((id) => respondedIds.has(id))) break;
-    }
-
-    await gradeAndSynthesize(inquiryId);
+    // No blocking wait — return immediately. Grading is triggered by the
+    // client's poll (getInquiry) or POST /api/cycles/resume once the window
+    // closes or all agents have responded.
   } catch (error) {
     await db
       .update(inquiries)
@@ -208,6 +203,46 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
       })
       .where(eq(inquiries.id, inquiryId));
   }
+}
+
+/**
+ * Attempt to grade if the window has closed OR all dispatched agents have
+ * already responded (early-exit optimization). Returns true if grading was
+ * started (caller should refetch the inquiry after).
+ * Used by getInquiry poll so the UI gets its readout without waiting the
+ * full 90s when the grid is fast.
+ */
+export async function tryGradeIfReady(inquiryId: string): Promise<boolean> {
+  const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
+  if (!inquiry || inquiry.status !== "collecting" || !inquiry.windowClosesAt) return false;
+
+  const windowClosed = Date.now() > Date.parse(inquiry.windowClosesAt);
+  if (windowClosed) {
+    await gradeAndSynthesize(inquiryId);
+    return true;
+  }
+
+  // Early grading: all dispatched agents have responded before the window closed.
+  if ((inquiry.agentsMatched ?? 0) > 0) {
+    const dispatchedCount = inquiry.agentsMatched!;
+    const [responded, acks] = await Promise.all([
+      db.select({ agentId: claims.agentId }).from(claims).where(eq(claims.inquiryId, inquiryId)),
+      db
+        .select({ agentId: dispatchAcks.agentId })
+        .from(dispatchAcks)
+        .where(eq(dispatchAcks.inquiryId, inquiryId)),
+    ]);
+    const respondedIds = new Set([
+      ...responded.map((r) => r.agentId),
+      ...acks.map((a) => a.agentId),
+    ]);
+    if (respondedIds.size >= dispatchedCount) {
+      console.log(`early grading ${inquiryId} — all ${dispatchedCount} agents responded`);
+      await gradeAndSynthesize(inquiryId);
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -249,21 +284,36 @@ export async function gradeAndSynthesize(inquiryId: string) {
   const [inquiry] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
   if (!inquiry) return;
 
+  // Idempotency: don't re-grade completed/failed, and don't double-grade when
+  // two poll ticks race. Second caller sees grading in progress and backs off.
+  if (inquiry.status === "complete" || inquiry.status === "failed") return;
+  if (inquiry.status === "grading") {
+    const updatedMs = inquiry.updatedAt ? Date.parse(inquiry.updatedAt) : 0;
+    if (Date.now() - updatedMs < 60_000) {
+      console.log(`gradeAndSynthesize skip — already grading ${inquiryId}`);
+      return;
+    }
+    console.log(`gradeAndSynthesize stale grading detected, retrying ${inquiryId}`);
+  }
+
   await db
     .update(inquiries)
     .set({ status: "grading", updatedAt: nowIso() })
     .where(eq(inquiries.id, inquiryId));
 
   const rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
-  const agentRows = await db
-    .select()
-    .from(agents)
-    .where(
-      inArray(
-        agents.id,
-        rawRows.map((r) => r.agentId),
-      ),
-    );
+  const agentRows =
+    rawRows.length === 0
+      ? []
+      : await db
+          .select()
+          .from(agents)
+          .where(
+            inArray(
+              agents.id,
+              rawRows.map((r) => r.agentId),
+            ),
+          );
 
   const agentMap = Object.fromEntries(
     agentRows.map((a) => [a.id, { id: a.id, reliability: a.reliability }]),

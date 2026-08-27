@@ -16,5 +16,16 @@ export default defineConfig({
     // Deploy target: Vercel. Overrides the wrapper's cloudflare-module default
     // for local/CI production builds; Lovable's sandbox builds are unaffected.
     preset: "vercel",
+    vercel: {
+      functions: {
+        // LLM grading + synthesis can take 30-60s combined; keep the function
+        // alive. Hobby is capped at 10s by Vercel regardless, Pro allows up
+        // to 300s — this is the Pro intent. Grading is AWAITED inside the
+        // request (no background wait), so the function stays alive.
+        maxDuration: 300,
+        memory: 1024,
+        runtime: "nodejs22.x",
+      },
+    },
   },
 });

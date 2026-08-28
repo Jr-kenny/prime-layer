@@ -22,6 +22,7 @@ import { Route as AppContributionsRouteImport } from './routes/app.contributions
 import { Route as AppDemandGraphRouteImport } from './routes/app.demand-graph'
 import { Route as AppDevelopersRouteImport } from './routes/app.developers'
 import { Route as AppEvidenceRouteImport } from './routes/app.evidence'
+import { Route as AppRecentRouteImport } from './routes/app.recent'
 import { Route as AppSupplyRouteImport } from './routes/app.supply'
 import { Route as AppOpportunitiesIdRouteImport } from './routes/app.opportunities.$id'
 
@@ -90,6 +91,11 @@ const AppEvidenceRoute = AppEvidenceRouteImport.update({
   path: '/evidence',
   getParentRoute: () => AppRoute,
 } as any)
+const AppRecentRoute = AppRecentRouteImport.update({
+  id: '/recent',
+  path: '/recent',
+  getParentRoute: () => AppRoute,
+} as any)
 const AppSupplyRoute = AppSupplyRouteImport.update({
   id: '/supply',
   path: '/supply',
@@ -114,6 +120,7 @@ export interface FileRoutesByFullPath {
   '/app/demand-graph': typeof AppDemandGraphRoute
   '/app/developers': typeof AppDevelopersRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/recent': typeof AppRecentRoute
   '/app/supply': typeof AppSupplyRoute
   '/app/': typeof AppIndexRoute
   '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
@@ -130,6 +137,7 @@ export interface FileRoutesByTo {
   '/app/demand-graph': typeof AppDemandGraphRoute
   '/app/developers': typeof AppDevelopersRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/recent': typeof AppRecentRoute
   '/app/supply': typeof AppSupplyRoute
   '/app': typeof AppIndexRoute
   '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
@@ -148,6 +156,7 @@ export interface FileRoutesById {
   '/app/demand-graph': typeof AppDemandGraphRoute
   '/app/developers': typeof AppDevelopersRoute
   '/app/evidence': typeof AppEvidenceRoute
+  '/app/recent': typeof AppRecentRoute
   '/app/supply': typeof AppSupplyRoute
   '/app/': typeof AppIndexRoute
   '/app/opportunities/$id': typeof AppOpportunitiesIdRoute
@@ -167,6 +176,7 @@ export interface FileRouteTypes {
     | '/app/demand-graph'
     | '/app/developers'
     | '/app/evidence'
+    | '/app/recent'
     | '/app/supply'
     | '/app/'
     | '/app/opportunities/$id'
@@ -183,6 +193,7 @@ export interface FileRouteTypes {
     | '/app/demand-graph'
     | '/app/developers'
     | '/app/evidence'
+    | '/app/recent'
     | '/app/supply'
     | '/app'
     | '/app/opportunities/$id'
@@ -200,6 +211,7 @@ export interface FileRouteTypes {
     | '/app/demand-graph'
     | '/app/developers'
     | '/app/evidence'
+    | '/app/recent'
     | '/app/supply'
     | '/app/'
     | '/app/opportunities/$id'
@@ -308,6 +320,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppEvidenceRouteImport
       parentRoute: typeof AppRoute
     }
+    '/app/recent': {
+      id: '/app/recent'
+      path: '/recent'
+      fullPath: '/app/recent'
+      preLoaderRoute: typeof AppRecentRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/app/supply': {
       id: '/app/supply'
       path: '/supply'
@@ -331,6 +350,7 @@ interface AppRouteChildren {
   AppDemandGraphRoute: typeof AppDemandGraphRoute
   AppDevelopersRoute: typeof AppDevelopersRoute
   AppEvidenceRoute: typeof AppEvidenceRoute
+  AppRecentRoute: typeof AppRecentRoute
   AppSupplyRoute: typeof AppSupplyRoute
   AppIndexRoute: typeof AppIndexRoute
   AppOpportunitiesIdRoute: typeof AppOpportunitiesIdRoute
@@ -342,6 +362,7 @@ const AppRouteChildren: AppRouteChildren = {
   AppDemandGraphRoute: AppDemandGraphRoute,
   AppDevelopersRoute: AppDevelopersRoute,
   AppEvidenceRoute: AppEvidenceRoute,
+  AppRecentRoute: AppRecentRoute,
   AppSupplyRoute: AppSupplyRoute,
   AppIndexRoute: AppIndexRoute,
   AppOpportunitiesIdRoute: AppOpportunitiesIdRoute,

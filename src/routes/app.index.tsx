@@ -723,7 +723,7 @@ function Intelligence() {
                                 </button>
                               </HoverCardTrigger>
                               <HoverCardContent className="w-80 p-3" align="start">
-                                <p className="label-mono text-ink-muted">Sources · click to read</p>
+                                <p className="label-mono text-ink-muted">Sources</p>
                                 <ul className="mt-2 space-y-1.5">
                                   {(entry.sources ?? []).slice(0, 5).map((s, i) => (
                                     <li key={`${s.url}-${i}`}>
@@ -741,10 +741,6 @@ function Intelligence() {
                                     </li>
                                   ))}
                                 </ul>
-                                <p className="mt-2 font-mono text-[0.6rem] text-ink-muted">
-                                  Hover shows {Math.min(5, entry.sources?.length ?? 0)} of{" "}
-                                  {entry.sources?.length ?? 0} — full list below.
-                                </p>
                               </HoverCardContent>
                             </HoverCard>
                           ) : (

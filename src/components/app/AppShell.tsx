@@ -1,6 +1,6 @@
 import { Link, useLocation } from "@tanstack/react-router";
 import { Suspense, lazy, useEffect, useState, type ReactNode } from "react";
-import { Bot, Boxes, Code2, Coins, FileSearch, GitBranch, Radar, Menu, X } from "lucide-react";
+import { Bot, Boxes, Code2, Coins, FileSearch, GitBranch, History, Radar, Menu, X } from "lucide-react";
 import { WorkspaceAuthShell } from "@/components/app/WorkspaceAuthShell";
 import { getNavCounts } from "@/lib/orchestrator/nav-counts";
 
@@ -15,6 +15,7 @@ const workspaceNav = [
     exact: false,
     note: "live" as NavNote,
   },
+  { to: "/app/recent", label: "Recent enquiries", icon: History, exact: false, note: null as NavNote },
   { to: "/app/supply", label: "Supply", icon: Boxes, exact: false, note: null as NavNote },
   { to: "/app/evidence", label: "Evidence", icon: FileSearch, exact: false, note: null as NavNote },
 ] as const;
@@ -135,6 +136,7 @@ function Brand({ compact = false }: { compact?: boolean }) {
 function TopbarSection() {
   const sections: [prefix: string, label: string][] = [
     ["/app/demand-graph", "Demand Graph"],
+    ["/app/recent", "Recent enquiries"],
     ["/app/supply", "Supply"],
     ["/app/evidence", "Evidence"],
     ["/app/agents", "Agents"],

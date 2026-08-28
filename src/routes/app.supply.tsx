@@ -1,8 +1,5 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { ArrowUpRight, Boxes, CheckCircle2, Clock, Plus, X } from "lucide-react";
-import { PrivyIdentity, type PrivyIdentityInfo } from "@/components/app/privy-identity";
-import { getInquiry, listMyRuns } from "@/lib/orchestrator/fns";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
+import { ArrowUpRight, Boxes, CheckCircle2, Plus, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { PageHeader } from "@/components/app/AppShell";
 import { MetricBlock, SectionHeading } from "@/components/app/AppUI";
@@ -33,27 +30,10 @@ function Supply() {
   const [market, setMarket] = useState("Nigeria");
   const [target, setTarget] = useState("Hospitality");
   const [capacity, setCapacity] = useState("");
-  const [privy, setPrivy] = useState<PrivyIdentityInfo>({
-    authenticated: false,
-    email: null,
-    walletAddress: null,
-    firstWallet: null,
-  });
-  const identity = privy.email ?? privy.walletAddress ?? null;
-  const [history, setHistory] = useState<Awaited<ReturnType<typeof listMyRuns>>>([]);
-  const [historyOpen, setHistoryOpen] = useState(true);
 
   useEffect(() => {
     void listSupplyLive().then(setRecords);
   }, []);
-
-  useEffect(() => {
-    if (!identity) {
-      setHistory([]);
-      return;
-    }
-    void listMyRuns({ data: { identity } }).then(setHistory);
-  }, [identity]);
 
   async function addRecord(event: React.FormEvent) {
     event.preventDefault();
@@ -100,107 +80,8 @@ function Supply() {
           </button>
         </RequireAuthAction>
       </PageHeader>
-      <PrivyIdentity onChange={setPrivy} />
 
       <div className="app-content">
-        <section className="surface mb-8 p-5 sm:p-6" aria-labelledby="recent-enquiries">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <p className="label-mono text-signal" id="recent-enquiries">
-                Recent enquiries
-              </p>
-              <h2 className="mt-1 font-display text-xl">Your past intelligence runs</h2>
-              <p className="mt-1 max-w-xl text-sm leading-relaxed text-muted-foreground">
-                Every run you paid for stays here. Hover a row to preview its sources, click to
-                reopen the full readout in Intelligence.
-              </p>
-            </div>
-            <button
-              type="button"
-              onClick={() => setHistoryOpen((v) => !v)}
-              className="rounded-sm border border-ink-border px-3.5 py-1.5 text-xs font-medium hover:border-signal hover:text-signal"
-            >
-              {historyOpen ? "Hide" : "Show"} {history.length > 0 ? `(${history.length})` : ""}
-            </button>
-          </div>
-
-          {historyOpen && (
-            <div className="mt-5">
-              {!identity ? (
-                <p className="rounded-sm border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  Sign in to see your past enquiries — they are saved to your workspace, not this
-                  browser.
-                </p>
-              ) : history.length === 0 ? (
-                <p className="rounded-sm border border-border p-6 text-center text-sm text-muted-foreground">
-                  No enquiries yet — run one from Intelligence and it will appear here.
-                </p>
-              ) : (
-                <ul className="divide-y divide-border rounded-sm border border-border">
-                  {history.slice(0, 12).map((row) => (
-                    <li key={row.id} className="group">
-                      <HoverCard>
-                        <HoverCardTrigger asChild>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (!row.complete) return;
-                              window.location.href = `/app?inquiry=${row.id}`;
-                            }}
-                            disabled={!row.complete}
-                            className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors enabled:hover:bg-slate/30 disabled:opacity-50 group-hover:bg-slate/5"
-                          >
-                            <span className="min-w-0 flex-1">
-                              <span className="block truncate text-sm font-medium text-vellum group-hover:text-signal">
-                                {row.question}
-                              </span>
-                              <span className="mt-0.5 block font-mono text-[0.65rem] text-ink-muted">
-                                {row.createdAt ? new Date(row.createdAt).toLocaleDateString() : ""}
-                                {row.complete
-                                  ? ` · ${row.sourcesClustered} sources · ${row.claimsReceived} signals`
-                                  : row.active
-                                    ? " · in progress"
-                                    : " · failed"}
-                              </span>
-                            </span>
-                            <span
-                              className={`flex shrink-0 items-center gap-1.5 rounded-sm px-2 py-1 font-mono text-[0.65rem] ${
-                                row.complete
-                                  ? "bg-verified/10 text-verified"
-                                  : row.active
-                                    ? "bg-signal/10 text-signal"
-                                    : "bg-border text-muted-foreground"
-                              }`}
-                            >
-                              {row.complete ? "view" : row.active ? "running" : "failed"}
-                              {row.complete && <ArrowUpRight className="size-3" />}
-                            </span>
-                          </button>
-                        </HoverCardTrigger>
-                        <HoverCardContent className="w-80 p-3" align="start">
-                          <p className="label-mono text-ink-muted">Preview</p>
-                          <p className="mt-1 line-clamp-3 text-sm leading-relaxed">
-                            {row.question}
-                          </p>
-                          <p className="mt-2 font-mono text-[0.65rem] text-ink-muted">
-                            {row.complete
-                              ? "Click to reopen full readout with sources in Intelligence."
-                              : "Run still in progress — check back in a minute."}
-                          </p>
-                          {row.complete && row.sourcesClustered > 0 && (
-                            <p className="mt-1 font-mono text-[0.65rem] text-signal">
-                              {row.sourcesClustered} independent source clusters · click to see them
-                            </p>
-                          )}
-                        </HoverCardContent>
-                      </HoverCard>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </section>
         {adding && (
           <RequireAuth>
             <section className="surface-dark mb-8 p-5 sm:p-6" aria-labelledby="add-supply">

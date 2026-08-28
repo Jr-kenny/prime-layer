@@ -90,7 +90,7 @@ const GENERIC_SINGLE_NOUNS = new Set(
 );
 
 type Evidence = { item: string; source: string; observed: string };
-type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string };
+type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string; contact?: string };
 type ResearchCommand = {
   command_id: string;
   inquiry_id: string;
@@ -427,12 +427,26 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
       280,
     );
 
+    // Contact: when an individual is the business (X/Medium/LinkedIn post tied 1:1
+    // to the name), the source itself is the contact — only when sure.
+    let contact: string | undefined;
+    if (evidence.length <= 2 && evidence[0]?.source) {
+      try {
+        const host = new URL(evidence[0].source).hostname.replace(/^www\./, "").toLowerCase();
+        const isSocial =
+          ["x.com", "twitter.com", "medium.com", "linkedin.com", "youtube.com", "instagram.com", "tiktok.com"].includes(host) ||
+          host.endsWith(".medium.com");
+        if (isSocial) contact = evidence[0].source;
+      } catch {}
+    }
+
     claims.push({
       company: bucket.name,
       claim: bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
       confidence,
       evidence,
       why_relevant: whyRelevant,
+      ...(contact ? { contact } : {}),
     });
     if (claims.length >= 8) break;
   }

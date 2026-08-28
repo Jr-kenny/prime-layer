@@ -47,6 +47,7 @@ const submitSchema = z.object({
         claim: z.string().min(10).max(500),
         confidence: z.number().min(0).max(1),
         why_relevant: z.string().max(280).optional(),
+        contact: z.string().max(280).optional(),
         evidence: z
           .array(
             z.object({
@@ -279,7 +280,8 @@ async function submitClaims(request: Request): Promise<Response> {
       claim: c.claim,
       confidence: c.confidence,
       evidenceJson: JSON.stringify(c.evidence),
-      whyRelevant: (c as { why_relevant?: string }).why_relevant ?? null,
+      whyRelevant: (c as { why_relevant?: string }).why_relevant?.slice(0, 280) ?? null,
+      contact: (c as { contact?: string }).contact?.slice(0, 280) ?? null,
       submittedAt: nowIso(),
     });
   }

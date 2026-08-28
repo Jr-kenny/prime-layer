@@ -331,6 +331,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
     confidence: row.confidence,
     evidence: JSON.parse(row.evidenceJson) as SubmittedClaim["evidence"],
     whyRelevant: (row as { whyRelevant?: string | null }).whyRelevant ?? null,
+    contact: (row as { contact?: string | null }).contact ?? null,
   }));
 
   const { graded, totalClusters } = gradeClaims({ claims: submitted, agents: agentMap });
@@ -485,6 +486,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
       );
       const sorted = [...list].sort((a, b) => b.weight - a.weight);
       const top = sorted[0]!;
+      const contact = sorted.find((c) => c.contact?.trim())?.contact?.trim() ?? null;
       const sourceMap = new Map<string, { label: string; url: string }>();
       for (const c of list) {
         for (const ev of c.evidence) {
@@ -514,6 +516,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
         independentSources: clusters.size,
         topClaim: top.whyRelevant?.trim() || top.claim,
         sources: Array.from(sourceMap.values()).slice(0, 6),
+        contact,
         contributingAgents: Array.from(new Set(list.map((c) => c.agentId))),
       };
     })
@@ -539,6 +542,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
           need: entry.topClaim,
           summary: entry.topClaim,
           confidence: best,
+          contact: entry.contact ?? row.contact,
           status: best >= 80 ? "verified" : row.status === "verified" ? "verified" : "open",
           inquiryId,
         })
@@ -554,6 +558,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
       need: entry.topClaim,
       summary: entry.topClaim,
       confidence: entry.confidence,
+      contact: entry.contact ?? null,
       status: entry.confidence >= 80 ? "verified" : "open",
       inquiryId,
       evidenceIdsJson: JSON.stringify([]),

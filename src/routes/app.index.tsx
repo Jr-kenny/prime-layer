@@ -674,6 +674,18 @@ function Intelligence() {
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed">
                               {entry.topClaim}
                             </p>
+                            {entry.contact ? (
+                              <p className="mt-2 font-mono text-xs">
+                                <a
+                                  href={entry.contact}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 text-signal underline underline-offset-4 hover:text-ink"
+                                >
+                                  Contact — {entry.contact.replace(/^https?:\/\//, "").slice(0, 48)}
+                                </a>
+                              </p>
+                            ) : null}
                           </div>
                           <div className="text-right shrink-0">
                             <p className="font-mono text-3xl text-signal">{entry.confidence}%</p>

@@ -29,6 +29,7 @@ import { generateHypotheses } from "./hypothesis";
 import { buildInitialInvestigation } from "./investigation";
 import { buildEvidenceGraph } from "./evidence-graph";
 import { computeBreakdown, detectContradictions } from "./scoring";
+import { runFollowUpRounds } from "./recurse";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
@@ -327,8 +328,8 @@ export async function gradeAndSynthesize(inquiryId: string) {
     .where(eq(inquiries.id, inquiryId));
 
   try {
-    const rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
-  const agentRows =
+    let rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
+  let agentRows =
     rawRows.length === 0
       ? []
       : await db
@@ -341,11 +342,11 @@ export async function gradeAndSynthesize(inquiryId: string) {
             ),
           );
 
-  const agentMap = Object.fromEntries(
+  let agentMap: Record<string, { id: string; reliability: number }> = Object.fromEntries(
     agentRows.map((a) => [a.id, { id: a.id, reliability: a.reliability }]),
   );
 
-  const submitted = rawRows.map((row) => ({
+  let submitted = rawRows.map((row) => ({
     agentId: row.agentId,
     company: row.company,
     claim: row.claim,
@@ -355,7 +356,71 @@ export async function gradeAndSynthesize(inquiryId: string) {
     contact: (row as { contact?: string | null }).contact ?? null,
   }));
 
-  const { graded, totalClusters } = gradeClaims({ claims: submitted, agents: agentMap });
+  const { graded: initialGraded, totalClusters: initialTotal } = gradeClaims({ claims: submitted, agents: agentMap });
+
+  // ── Recursive investigation: expand top signals into follow-up checks ──
+  // If the first pass is thin, contradictory, or low confidence, dispatch
+  // verification/company/project/procurement tasks to specialist agents and
+  // collect a second wave before the LLM judges relevance.
+  let graded: (typeof initialGraded) = initialGraded;
+  let totalClusters = initialTotal;
+  try {
+    const invStateRaw = inquiry.investigationJson ? JSON.parse(inquiry.investigationJson as string) : null;
+    const prelimContradictions = detectContradictions(initialGraded);
+    if (invStateRaw && initialGraded.length > 0 && initialGraded.length < MAX_SOURCES) {
+      const submitUrl =
+        process.env["PUBLIC_SUBMIT_URL"]
+          ? `${process.env["PUBLIC_SUBMIT_URL"]}/api/claims/submit`
+          : process.env["VERCEL_URL"]
+            ? `https://${process.env["VERCEL_URL"]}/api/claims/submit`
+            : "http://localhost:8081/api/claims/submit";
+      const scopeForFollowUp = extractScope(inquiry.question);
+      const followUp = await runFollowUpRounds({
+        inquiryId,
+        question: inquiry.question,
+        scope: scopeForFollowUp,
+        submitUrl,
+        initialGraded,
+        initialSubmitted: submitted,
+        initialInvestigation: invStateRaw,
+        totalClusters: initialTotal,
+        contradictions: prelimContradictions,
+      });
+      if (followUp.roundsRun > 0 && followUp.finalGraded.length > initialGraded.length) {
+        if (followUp.finalInvestigation) {
+          await db
+            .update(inquiries)
+            .set({ investigationJson: JSON.stringify(followUp.finalInvestigation), updatedAt: nowIso() })
+            .where(eq(inquiries.id, inquiryId));
+        }
+        graded = followUp.finalGraded;
+        const mergedClusters = new Set(graded.flatMap((g) => g.evidence.map((e) => sourceClusterKey(e.source)))).size;
+        totalClusters = mergedClusters;
+        console.log(`[recurse] accepted follow-up: ${followUp.newClaimsAdded} new claims, final graded ${graded.length}`);
+        // Refresh DB rows so persistence (weight update) can find new claim ids
+        rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
+        agentRows =
+          rawRows.length === 0
+            ? []
+            : await db
+                .select()
+                .from(agents)
+                .where(inArray(agents.id, rawRows.map((r) => r.agentId)));
+        agentMap = Object.fromEntries(agentRows.map((a) => [a.id, { id: a.id, reliability: a.reliability }]));
+        submitted = rawRows.map((row) => ({
+          agentId: row.agentId,
+          company: row.company,
+          claim: row.claim,
+          confidence: row.confidence,
+          evidence: JSON.parse(row.evidenceJson) as SubmittedClaim["evidence"],
+          whyRelevant: (row as { whyRelevant?: string | null }).whyRelevant ?? null,
+          contact: (row as { contact?: string | null }).contact ?? null,
+        }));
+      }
+    }
+  } catch (e) {
+    console.error("[recurse] follow-up failed, continuing with initial grade:", e);
+  }
 
   // The orchestrator's intelligence pass: an LLM through the 0G Compute Router
   // judges relevance (does this claim answer THIS buyer?) and evidence quality

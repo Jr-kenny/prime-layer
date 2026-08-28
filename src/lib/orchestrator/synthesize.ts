@@ -7,7 +7,7 @@ import { chatJson, computeRouterConfig } from "@/lib/0g/compute-router";
 import { sourceClusterKey } from "./grade";
 
 /**
- * The synthesis pass — where the orchestrator thinks.
+ * The synthesis pass — where the orchestrator thinks out loud to the buyer.
  *
  * Grading weights evidence; synthesis decides what it MEANS for this buyer:
  * - several news items about one company become ONE company;
@@ -18,8 +18,7 @@ import { sourceClusterKey } from "./grade";
  * - every recommendation carries the source links the client can open.
  *
  * Voice and judgment rules live in soul.md at the repo root.
- * Falls back to a deterministic merged readout if the Router is unavailable —
- * the client always gets structure, never a firehose.
+ * Falls back to deterministic merged readout if the Router is unavailable.
  */
 
 export type SynthesisSource = {
@@ -57,29 +56,26 @@ async function loadSoul(): Promise<string> {
   }
 }
 
-const SYSTEM = `You are the synthesis mind of Prime Layer, a B2B demand-intelligence network.
-Research agents returned evidence for a buyer's question. You turn that raw material into a
-recommendation readout the buyer will actually read.
+const SYSTEM = `You are the Intelligence Director of Prime Layer. You brief a busy business owner — not an analyst, not a committee — in plain, warm, spoken language. Think: how you'd explain it to them over coffee, with the receipts on the table.
 
-Rules (enforced):
-- MERGE: multiple entries about the same real-world company are ONE recommendation with one
-  clean company name. Work out the real company from the headlines ("Stock of The Day: Buy Ola
-  Electric" is Ola Electric, not "Stock"). Never output two recommendations for one company.
-- RECOMMEND, don't list: each recommendation explains in 2-4 sentences why THIS company matters
-  to THIS buyer right now, based only on the evidence given. No invented facts, no numbers that
-  are not in the evidence.
-- HONESTY: if the evidence is weak, thin, or off-target, say so plainly in the preamble —
-  "honestly, what came back may not be entirely what you hoped" energy — then still present the
-  strongest threads. Never pad.
-- SOURCES: every recommendation carries 1-4 source links from its evidence. label = site or
-  short description, url = the exact evidence URL.
-- VOICE: plain, direct, human business language. No hashtags, no emoji, no jargon, no hype.
+Research agents returned clustered evidence for the buyer's question. You turn that into a readout the buyer will actually act on.
+
+HARD RULES:
+- MERGE: multiple entries about the same real-world company are ONE recommendation with one clean name. Work out the real company from headlines ("Stock of The Day: Buy Ola Electric" is Ola Electric, not "Stock"). Never output two recommendations for one company.
+- FACT vs INFERENCE: every recommendation must separate what we FOUND (source said X on date, with link) from what it SUGGESTS (because X, they likely need Y within N months). Never present a guess as a fact. Use phrases like "We found...", "The filing says...", "This suggests...", "So you'd likely..."
+- HUMAN REASONING: each body is 3-5 sentences that walk the buyer through your thinking out loud:
+  1) What we found — the concrete observation with how recent it is
+  2) Why it matters for THIS buyer — connect the finding to the inventory they asked about (their actual goods, not a preset category)
+  3) Your take — is this high confidence or needs a check, and what you'd do next (who to contact, what to verify)
+  Write it like you're speaking: "We recommend checking in with..." / "Here's why this one stands out..." / "Honestly, this is thinner than the others because...". No bullet lists inside the body, no jargon, no hype.
+- HONESTY: if evidence is thin, off-target, or stale, say so plainly in the preamble — "Honestly, what came back may not be exactly what you hoped — here's why — but these are the strongest threads we found." Never pad.
+- SOURCES: every recommendation carries 1-4 source links from its evidence. label = site hostname or short desc, url = exact evidence URL.
+- VOICE: contractions are fine. Short paragraphs. Direct and warm. No hashtags, no emoji, no corporate robot talk. If you wouldn't say it to a person, don't write it.
 
 Respond with JSON only, exactly:
-{"preamble":"<1-3 sentences setting expectations honestly>",
- "recommendations":[{"company":"<clean company name>","title":"<one-line hook>","body":"<why this company, why now, connected to the buyer's goods>","confidence":<0-100>,"sources":[{"label":"<site>","url":"<url>"}]}]}
-Order recommendations strongest first. 1-6 recommendations. If nothing is recommendable, return
-an empty recommendations array and explain in the preamble.`;
+{"preamble":"<1-3 sentences setting expectations honestly, spoken style>",
+ "recommendations":[{"company":"<clean company name>","title":"<one-line hook, human>","body":"<3-5 sentences: found → suggests → take, human spoken>","confidence":<0-100>,"sources":[{"label":"<site>","url":"<url>"}]}]}
+Order recommendations strongest first. 1-6 recommendations. If nothing is recommendable, return empty recommendations and explain honestly in the preamble.`;
 
 function normalizeCompany(name: string): string {
   return name
@@ -89,7 +85,7 @@ function normalizeCompany(name: string): string {
     .trim();
 }
 
-/** Deterministic fallback: merge same-named entries, attach real source URLs. */
+/** Deterministic fallback: merge same-named entries, attach real source URLs, but speak like a person. */
 function fallbackSynthesis(
   question: string,
   entries: (ReadoutEntry & { sources: SynthesisSource[] })[],
@@ -115,22 +111,39 @@ function fallbackSynthesis(
       });
     }
   }
+  const inventory = question.slice(0, 60);
   const recs = Array.from(merged.values())
     .sort((a, b) => b.confidence - a.confidence)
-    .map((m) => ({
-      company: m.name,
-      title: m.claim.slice(0, 90),
-      body:
-        `${m.claim} This is the strongest signal the grid returned for your question — ` +
-        `worth a direct look before you commit stock elsewhere.`,
-      confidence: m.confidence,
-      sources: m.sources.slice(0, 4),
-    }));
+    .map((m) => {
+      // Human-spoken body: found -> suggests -> take
+      const found = m.claim;
+      const sourceSite = m.sources[0]?.label ?? "a source";
+      const suggests =
+        m.confidence >= 75
+          ? `Because they're in this kind of build-out, they'll likely need ${inventory} in the next few months — the timing lines up.`
+          : `If you sell ${inventory}, this kind of project is the sort that creates that demand — worth checking whether their buying window is still open.`;
+      const take =
+        m.confidence >= 75
+          ? `We'd recommend reaching out to their procurement or project team and pointing to the filing — you've got a real reason to call.`
+          : `We'd suggest a quick check-in with them to confirm scale and whether they've already placed orders.`;
+      return {
+        company: m.name,
+        title: found.slice(0, 90),
+        body:
+          `We found that ${found} — reported via ${sourceSite}. ` +
+          `${suggests} ${take}`,
+        confidence: m.confidence,
+        sources: m.sources.slice(0, 4),
+      };
+    });
+  const preamble =
+    recs.length === 0
+      ? `We ran your request through the grid but didn't pull back anything strong enough to recommend this time — the signals were either too thin or didn't connect clearly to what you're selling.`
+      : recs.length < 3
+        ? `Honestly, what came back was a bit thin — fewer independent signals than we'd like — but these are the strongest threads we found that actually connect to what you're selling.`
+        : `Here's what the grid surfaced for you — we've clustered everything by company and kept only the threads where the evidence and timing actually line up with what you're selling.`;
   return {
-    preamble:
-      `We asked the grid about your request and clustered what came back. ` +
-      `The automated writer was unavailable, so these are the clustered signals rather than a ` +
-      `full written assessment — every source link is live so you can verify each one yourself.`,
+    preamble,
     recommendations: recs,
   };
 }
@@ -203,11 +216,11 @@ export async function synthesizeInquiry(inquiryId: string): Promise<void> {
       }));
       const result = await chatJson({
         system: `${SYSTEM}\n\nVOICE AND JUDGMENT GUIDE (soul.md):\n${soul}`,
-        user: `BUYER QUESTION:\n${inquiry.question}\n\nCLUSTERED EVIDENCE FROM THE GRID:\n${payload
+        user: `BUYER QUESTION:\n${inquiry.question}\n\nCLUSTERED EVIDENCE FROM THE GRID (each entry is one company with its strongest claim and sources):\n${payload
           .map((p) => JSON.stringify(p))
-          .join("\n")}`,
-        maxTokens: 2400,
-        temperature: 0.3,
+          .join("\n")}\n\nWrite the readout now. Remember to speak like a person explaining to the buyer why each company matters for THEIR inventory, not generically. Facts first, then what it suggests for them.`,
+        maxTokens: 2800,
+        temperature: 0.35,
         timeoutMs: 120_000,
       });
       const start = result.content.indexOf("{");

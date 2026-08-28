@@ -153,7 +153,7 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
       : `Video "${v.title}" by ${v.channel}: ${v.description.slice(0, 180)}`;
 
     const hint = (cmd.scope.category ?? cmd.question).slice(0, 60);
-    const why = `${company} appears in video "${v.title.slice(0, 40)}" — shows active construction/development, likely needs ${hint} soon. Check video for scale and contacts.`.slice(0, 280);
+    const why = `We found ${company} in video "${v.title.slice(0, 40)}" by ${v.channel} — it shows active development. Because they're in this build-out phase, they'd likely need ${hint} as the project moves forward. We'd recommend watching the clip for scale and who to contact.` .slice(0, 340);
 
     claims.push({
       company,

@@ -443,12 +443,16 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
     if (bucket.filingSeen) confidence += 0.04;
     confidence = Math.min(0.92, Number(confidence.toFixed(2)));
 
-    // Why this lead matters for THIS buyer — turns a headline into a sales reason.
+    // Why this lead matters for THIS buyer — human-spoken, fact → suggestion → take
     const buyerHint = (cmd.scope.category ?? cmd.question).slice(0, 80);
     const verb = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion signal";
-    const whyRelevant = `${bucket.name} shows ${verb.toLowerCase()} — likely needs ${buyerHint} soon. Worth checking the ${evidence.length} source${evidence.length === 1 ? "" : "s"} before you commit stock elsewhere.`.slice(
+    const sourceSite = (() => {
+      try { return bucket.best.publisherUrl ? new URL(bucket.best.publisherUrl).hostname.replace(/^www\./, "") : "news"; } catch { return "news"; }
+    })();
+    const date = bucket.best.publishedAt;
+    const whyRelevant = `We found ${bucket.name} shows ${verb.toLowerCase()} — reported via ${sourceSite} on ${date}. Because they're in this phase, they'd likely need ${buyerHint} in the next few months — timing lines up. We'd recommend checking whether their buying is still open before you commit stock elsewhere.`.slice(
       0,
-      280,
+      340,
     );
 
     // Contact: when an individual is the business (X/Medium/LinkedIn post tied 1:1

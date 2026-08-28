@@ -10,53 +10,76 @@ export type DemandHypothesis = {
   whatToVerify: string[];
 };
 
-const FALLBACK_HYPOTHESES: DemandHypothesis[] = [
+/**
+ * Generic fallback hypotheses — used when the LLM is unavailable.
+ * These are intentionally inventory-agnostic. The actual inventory from the
+ * buyer's question is woven into demandType + searchHints at runtime so
+ * no business vertical is privileged (electrical, pharma, packaging, etc. all work).
+ */
+const GENERIC_TEMPLATES: Omit<DemandHypothesis, "demandType" | "searchHints">[] = [
   {
-    id: "H-HOTEL",
-    label: "Hotels and hospitality",
-    demandType: "room furnishing and building services",
-    entityTypes: ["hotel", "resort", "hospitality group", "developer"],
-    signals: ["new hotel construction", "hotel renovation", "hotel expansion", "hotel furnishing"],
-    searchHints: ["hotel construction announced", "hotel development", "hotel renovation project"],
-    whatToVerify: ["who owns the project", "construction status", "contractor", "procurement window"],
-  },
-  {
-    id: "H-CONSTRUCTION",
-    label: "Construction and real estate",
-    demandType: "building fit-out and estate development",
-    entityTypes: ["apartment development", "mall", "hospital", "school", "office building", "estate", "industrial facility"],
-    signals: ["new development announced", "estate launch", "building construction"],
-    searchHints: ["apartment development construction", "mall construction", "estate development"],
-    whatToVerify: ["developer", "contractor", "scope", "timeline"],
-  },
-  {
-    id: "H-INFRA",
-    label: "Infrastructure and electrification",
-    demandType: "infrastructure and community projects",
-    entityTypes: ["government", "contractor", "infrastructure project"],
-    signals: ["road construction", "infrastructure project", "electrification contract"],
-    searchHints: ["street lighting project", "solar lighting tender", "electrification project"],
-    whatToVerify: ["awarding authority", "contractor", "procurement still open", "project size"],
+    id: "H-NEW-SITES",
+    label: "New sites & construction",
+    entityTypes: ["developer", "contractor", "operator"],
+    signals: ["new facility announced", "construction started", "project permit filed", "site under development"],
+    whatToVerify: ["who owns the project", "location and scale", "construction status", "procurement window"],
   },
   {
     id: "H-EXPANSION",
-    label: "Business expansion signals",
-    demandType: "new branches, facilities and renovations",
-    entityTypes: ["company", "retail chain", "factory", "branch"],
-    signals: ["expansion announced", "new branch", "new facility", "renovation"],
-    searchHints: ["company expansion", "new branch opening", "new facility announced"],
-    whatToVerify: ["company owns signal", "location", "scale", "purchasing role"],
+    label: "Expansion & new capacity",
+    entityTypes: ["company", "retail chain", "factory", "branch network"],
+    signals: ["expansion announced", "new branch or store opening", "new plant or warehouse commissioned", "hiring surge for new site"],
+    whatToVerify: ["company owns signal", "geography and timeline", "scale of rollout", "purchasing contact"],
+  },
+  {
+    id: "H-PROJECTS",
+    label: "Infrastructure & large projects",
+    entityTypes: ["government", "project owner", "EPC contractor", "consortium"],
+    signals: ["tender issued", "contract awarded", "infrastructure programme launched", "public-private partnership announced"],
+    whatToVerify: ["awarding authority", "prime contractor", "budget and scope", "procurement still open"],
+  },
+  {
+    id: "H-REFRESH",
+    label: "Refurbishment & replacement",
+    entityTypes: ["facility operator", "property group", "industrial plant"],
+    signals: ["renovation announced", "refurbishment underway", "modernization programme", "compliance-driven upgrade"],
+    whatToVerify: ["asset being refurbished", "scope of replacement", "timeline", "decision maker"],
   },
 ];
 
+function inventoryHintFromQuestion(question: string): string {
+  // Keep it short and human — what the buyer says they have to move.
+  const cleaned = question.replace(/\s+/g, " ").trim().slice(0, 80);
+  return cleaned || "the buyer's inventory";
+}
+
+function topicsFromQuestion(question: string): string[] {
+  const stop = new Set(
+    "a an and are as at be been by for find from has have how i in into is it its me my of on or our sell selling show that the their them they this to us want was we what which who will with you your".split(
+      " ",
+    ),
+  );
+  return question
+    .toLowerCase()
+    .replace(/[^a-z0-9\s]/g, " ")
+    .split(/\s+/)
+    .filter((w) => w.length > 3 && !stop.has(w) && !/^\d+$/.test(w))
+    .slice(0, 4);
+}
+
 function deterministicHypotheses(question: string): DemandHypothesis[] {
-  const lower = question.toLowerCase();
-  // Very small heuristic: if question mentions a category, inject it into demandType
-  const inventoryHint = question.slice(0, 80);
-  return FALLBACK_HYPOTHESES.map((h) => ({
-    ...h,
-    demandType: `${h.demandType} — likely needs ${inventoryHint} soon`,
-  }));
+  const hint = inventoryHintFromQuestion(question);
+  const topics = topicsFromQuestion(question);
+  const topicSuffix = topics.length ? topics.slice(0, 2).join(" ") : "";
+  // Turn generic templates into inventory-aware hypotheses without hardcoding any vertical.
+  return GENERIC_TEMPLATES.map((t) => {
+    const baseHints = t.signals.slice(0, 2).map((s) => (topicSuffix ? `${s} ${topicSuffix}` : s));
+    return {
+      ...t,
+      demandType: `${t.label.toLowerCase()} — likely needs ${hint} as sites expand or refurbish`,
+      searchHints: baseHints,
+    };
+  });
 }
 
 const SYSTEM = `You are the hypothesis generator for a Commercial Intelligence Network.
@@ -65,34 +88,36 @@ Given the user's objective and inventory, generate 3-5 demand hypotheses.
 Each hypothesis must be:
 - a plausible way the inventory could be needed (not just pages containing the product name)
 - tied to entity types that could have that demand
-- described by observable signals (e.g. "new hotel announced", "road awarded")
+- described by observable signals (e.g. "new facility announced", "tender awarded", "hiring surge")
 - with search hints an agent could use
 - and what to verify before it becomes an opportunity
 
 Return JSON: { "hypotheses": [{ "label": string, "demandType": string, "entityTypes": string[], "signals": string[], "searchHints": string[], "whatToVerify": string[] }] }
 
 Rules:
-- demandType should be concrete: what equipment would be needed and why
+- demandType should be concrete: what equipment/material/service would be needed and why — derived from the buyer's actual inventory, not a preset category
 - entityTypes 2-4 items
 - signals 3-5 items, observable public signals
-- searchHints 2-3 short queries
+- searchHints 2-3 short queries an agent can run verbatim
 - whatToVerify 3-5 items
 - Keep labels short (2-4 words)
-- Do not invent inventory you were not given; use what the user provided`;
+- Do not invent inventory you were not given; use what the user provided
+- Do not default to hotels/electricals — adapt to the inventory in the objective`;
 
 export async function generateHypotheses(question: string): Promise<DemandHypothesis[]> {
   const cfg = computeRouterConfig();
-  if (!cfg) return deterministicHypotheses(question);
+  if (!cfg.live) return deterministicHypotheses(question);
   try {
-    const { json } = await chatJson<{ hypotheses?: DemandHypothesis[] }>({
-      messages: [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `Objective: ${question.slice(0, 600)}` },
-      ],
+    const { content } = await chatJson({
+      system: SYSTEM,
+      user: `Objective: ${question.slice(0, 600)}`,
+      maxTokens: 2500,
       temperature: 0.4,
-      max_tokens: 1200,
     });
-    const list = json?.hypotheses;
+    const start = content.indexOf("{");
+    const end = content.lastIndexOf("}");
+    const parsed = JSON.parse(content.slice(start, end + 1)) as { hypotheses?: DemandHypothesis[] };
+    const list = parsed?.hypotheses;
     if (!Array.isArray(list) || list.length < 2) return deterministicHypotheses(question);
     return list.slice(0, 5).map((h, i) => ({
       id: `H-${i + 1}`,

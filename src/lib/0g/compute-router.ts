@@ -66,14 +66,19 @@ export type ChatJsonResult = {
 
 /** Tolerant JSON extraction — models occasionally wrap JSON in prose or fences. */
 function parseJsonLoose(text: string): unknown {
+  // Strip markdown fences first — models love ```json ... ```
+  const stripped = text
+    .replace(/^```(?:json)?\s*/i, "")
+    .replace(/\s*```\s*$/i, "")
+    .trim();
   try {
-    return JSON.parse(text);
+    return JSON.parse(stripped);
   } catch {
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
+    const start = stripped.indexOf("{");
+    const end = stripped.lastIndexOf("}");
     if (start >= 0 && end > start) {
       try {
-        return JSON.parse(text.slice(start, end + 1));
+        return JSON.parse(stripped.slice(start, end + 1));
       } catch {
         // fall through
       }

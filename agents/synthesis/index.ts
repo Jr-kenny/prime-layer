@@ -24,7 +24,7 @@ const GDELT_ENABLED = (process.env["SIGNALS_GDELT"] ?? "on").toLowerCase() !== "
 
 const NAME = "synthesis — Synthesis — connect evidence i";
 const SPECIALTY =
-  "global news sweep: expansion, construction, opening and investment signals across hotels, manufacturing, logistics and retail";
+  "Synthesis — connects evidence into coherent commercial hypotheses";
 
 const wallet =
   process.env["CONNECTOR_WALLET"] ??
@@ -106,7 +106,7 @@ type ResearchCommand = {
 
 function buildQueries(cmd: ResearchCommand): string[] {
   // Hypotheses-aware: use the orchestrator's search hints first — they already encode
-  // inventory→demand reasoning (hotel construction, street-lighting etc.), not just keywords.
+  // inventory→demand reasoning (new sites, expansion, projects), not just keywords.
   if (cmd.hypotheses?.length) {
     const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
     if (hints.length >= 2) {
@@ -339,12 +339,25 @@ function scoreSignal(signal: RawSignal): number {
 }
 
 /**
- * Topic relevance gate: at least one meaningful inquiry word must appear in
- * the headline (or the story is about a different universe of companies).
+ * Topic relevance gate — hypothesis-aware.
+ * When the orchestrator supplied hypotheses, a signal is relevant if it
+ * matches EITHER the buyer topic OR any hypothesis signal vocabulary
+ * (expansion/construction/tender etc.). This keeps the filter honest for
+ * generic B2B: a new plant still matters to a packaging supplier even when
+ * the headline never says "packaging".
  */
-function isRelevant(title: string, topicWords: string[]): boolean {
+function isRelevant(title: string, topicWords: string[], hypotheses?: { signals?: string[] }[]): boolean {
   const lower = title.toLowerCase();
-  return topicWords.some((w) => lower.includes(w));
+  if (topicWords.some((w) => lower.includes(w))) return true;
+  // Hypothesis signal match — e.g. "new facility announced" against title
+  if (hypotheses?.length) {
+    const sigWords = hypotheses.flatMap((h) => h.signals ?? []).join(" ").toLowerCase().split(/\s+/).filter((w) => w.length > 3);
+    const sigSet = new Set(sigWords);
+    // Also check SIGNAL_RE as generic expansion vocabulary fallback
+    if (typeof SIGNAL_RE !== "undefined" && SIGNAL_RE.test(title)) return true;
+    if ([...sigSet].some((w) => lower.includes(w))) return true;
+  }
+  return false;
 }
 
 /** Merge key: normalised company name across ALL sources. */
@@ -383,7 +396,7 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
     if (!company) continue;
 
     // Relevance: filings matched the query by construction; news must prove it.
-    if (!s.companyOverride && !isRelevant(s.title, topicWords)) continue;
+    if (!s.companyOverride && !isRelevant(s.title, topicWords, cmd.hypotheses)) continue;
     if (s.companyOverride && s.topicMatched && !isRelevant(company, [s.topicMatched])) {
       // registrant name doesn't contain the topic — that's fine, the FILING
       // text did; keep it.

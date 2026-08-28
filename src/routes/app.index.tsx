@@ -57,7 +57,8 @@ type ReadoutEntry = {
 
 const EXAMPLES = [
   "Which hotel chains and manufacturers are expanding or building new facilities right now?",
-  "hey we are a company dealing on electricals and yesterday stocks worth 13m usd came in and we have 6 months to clear it. can you look for future partners we can meet that may be in need of these goods, not limited to only chandeliers, sockets, leds, solars etc we have a wide range of goods in stock",
+  "We took in $13M of mixed industrial stock with 6 months to move it — find partners whose projects or expansions will need it soon.",
+  "We supply packaging materials and cold-chain equipment — which food processors and pharma distributors are expanding capacity this quarter?",
 ];
 
 type RunHistoryRow = {
@@ -363,7 +364,7 @@ function Intelligence() {
                   onChange={(event) => setQuery(event.target.value)}
                   readOnly={submitting}
                   aria-readonly={submitting}
-                  placeholder="e.g. We have $13M of electricals to move in 6 months — who needs chandeliers, sockets, LEDs and solar right now?"
+                  placeholder="e.g. We have $2M of packaging stock to move — which food processors and logistics firms are expanding right now?"
                   className="mt-3 w-full"
                 />
                 <div className="app-query-meta">

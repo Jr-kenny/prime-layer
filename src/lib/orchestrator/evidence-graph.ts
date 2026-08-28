@@ -110,6 +110,6 @@ export function factsVsInference(graded: GradedClaim[], topCompany: string) {
   const inferences = list
     .map((g) => g.whyRelevant)
     .filter(Boolean)
-    .map((w) => ({ text: w!, reason: "Hotels need electrical per room — based on the announced project" }));
+    .map((w) => ({ text: w!, reason: "Inferred from the announced activity and the buyer's inventory — needs verification" }));
   return { facts: facts.slice(0, 4), inferences: inferences.slice(0, 2) };
 }

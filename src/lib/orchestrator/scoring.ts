@@ -40,8 +40,13 @@ export function computeBreakdown(list: GradedClaim[], hasContact: boolean): Scor
   }));
   const freshness = freshnessVals.length ? Math.round(freshnessVals.reduce((a, b) => a + b, 0) / freshnessVals.length) : 50;
 
-  // Timing: procurement window — if claim mentions Q4/current year or "upcoming", higher
-  const timing = list.some((g) => /upcoming|Q[1-4]|2026|next month|soon/i.test(g.claim + g.whyRelevant)) ? 78 : 55;
+  // Timing: procurement window — if claim mentions upcoming/current year or near-term phrasing, higher
+  const timing = (() => {
+    const year = new Date().getFullYear().toString();
+    const nextYear = (new Date().getFullYear() + 1).toString();
+    const re = new RegExp(`upcoming|Q[1-4]|${year}|${nextYear}|next month|soon`, "i");
+    return list.some((g) => re.test(g.claim + (g.whyRelevant ?? ""))) ? 78 : 55;
+  })();
 
   // Competition: inverse of duplication — more independent sources = less competition risk
   const distinct = new Set(list.flatMap((g) => g.evidence.map((e) => e.source))).size;

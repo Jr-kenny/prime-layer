@@ -623,19 +623,20 @@ function Intelligence() {
                         {rec.sources.length > 0 && (
                           <div className="mt-5 border-t border-border pt-4">
                             <p className="label-mono text-muted-foreground">
-                              Sources · read them yourself
+                              Sources — {rec.sources.length} links
                             </p>
-                            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                            <ul className="mt-2 flex flex-wrap gap-2">
                               {rec.sources.map((source, sIndex) => (
                                 <li key={`${source.url}-${sIndex}`}>
                                   <a
                                     href={source.url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 font-mono text-xs text-signal hover:text-ink"
+                                    title={source.url}
+                                    className="inline-flex max-w-[220px] items-center gap-1.5 rounded-sm border border-border px-2.5 py-1.5 font-mono text-xs text-signal hover:border-signal hover:bg-slate/30"
                                   >
-                                    {source.label || "source"}
-                                    <ArrowUpRight className="size-3" aria-hidden />
+                                    <span className="truncate">{source.label || source.url}</span>
+                                    <ArrowUpRight className="size-3 shrink-0" aria-hidden />
                                   </a>
                                 </li>
                               ))}
@@ -687,68 +688,80 @@ function Intelligence() {
                             <p className="label-mono text-muted-foreground">match</p>
                           </div>
                         </div>
-                        {(entry.sources?.length ?? 0) > 0 && (
-                          <div className="mt-5 border-t border-border pt-4">
-                            <p className="label-mono text-muted-foreground">
-                              Sources · read them yourself
-                            </p>
-                            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                        <div className="mt-5 border-t border-border pt-4">
+                          <p className="label-mono text-muted-foreground">
+                            Sources — {entry.independentSources} independent
+                          </p>
+                          {(entry.sources?.length ?? 0) > 0 ? (
+                            <ul className="mt-2 flex flex-wrap gap-2">
                               {(entry.sources ?? []).map((source, sIndex) => (
                                 <li key={`${source.url}-${sIndex}`}>
                                   <a
                                     href={source.url}
                                     target="_blank"
                                     rel="noreferrer"
-                                    className="inline-flex items-center gap-1.5 font-mono text-xs text-signal hover:text-ink"
+                                    title={source.url}
+                                    className="inline-flex max-w-[220px] items-center gap-1.5 rounded-sm border border-border px-2.5 py-1.5 font-mono text-xs text-signal hover:border-signal hover:bg-slate/30"
                                   >
-                                    {source.label || "source"}
-                                    <ArrowUpRight className="size-3" aria-hidden />
+                                    <span className="truncate">{source.label || source.url}</span>
+                                    <ArrowUpRight className="size-3 shrink-0" aria-hidden />
                                   </a>
                                 </li>
                               ))}
                             </ul>
-                          </div>
-                        )}
+                          ) : (
+                            <p className="mt-2 font-mono text-xs text-ink-muted">
+                              {entry.independentSources} sources clustered — links will appear here on your next run (this one was graded before link storage).
+                            </p>
+                          )}
+                        </div>
                         <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
-                          {(entry.sources?.length ?? 0) > 0 ? (
-                            <HoverCard>
-                              <HoverCardTrigger asChild>
-                                <button className="label-mono text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-signal hover:decoration-signal">
-                                  {entry.independentSources} independent source
-                                  {entry.independentSources === 1 ? "" : "s"}
-                                  {entry.claims > entry.independentSources
-                                    ? ` · ${entry.claims} signals clustered`
-                                    : ""}
-                                  <span className="ml-1 text-[0.6rem]">↗</span>
-                                </button>
-                              </HoverCardTrigger>
-                              <HoverCardContent className="w-80 p-3" align="start">
-                                <p className="label-mono text-ink-muted">Sources</p>
-                                <ul className="mt-2 space-y-1.5">
-                                  {(entry.sources ?? []).slice(0, 5).map((s, i) => (
+                          <HoverCard openDelay={80} closeDelay={100}>
+                            <HoverCardTrigger asChild>
+                              <button className="inline-flex items-center gap-1.5 rounded-sm border border-border px-2.5 py-1.5 label-mono text-muted-foreground hover:border-signal hover:text-signal">
+                                {entry.independentSources} sources
+                                {entry.claims > entry.independentSources
+                                  ? ` · ${entry.claims} signals`
+                                  : ""}
+                                <ArrowUpRight className="size-3" aria-hidden />
+                              </button>
+                            </HoverCardTrigger>
+                            <HoverCardContent className="w-96 p-3" align="start" sideOffset={8}>
+                              <p className="label-mono text-ink-muted">
+                                {entry.independentSources} sources — hover or click to open
+                              </p>
+                              {(entry.sources?.length ?? 0) > 0 ? (
+                                <ul className="mt-2 max-h-[280px] space-y-1.5 overflow-auto pr-1">
+                                  {(entry.sources ?? []).map((s, i) => (
                                     <li key={`${s.url}-${i}`}>
                                       <a
                                         href={s.url}
                                         target="_blank"
                                         rel="noreferrer"
-                                        className="flex items-center justify-between gap-2 rounded-sm border border-border px-2 py-1.5 text-xs hover:border-signal hover:bg-slate/30"
+                                        title={s.url}
+                                        className="flex items-center justify-between gap-2 rounded-sm border border-border px-2.5 py-2 text-xs hover:border-signal hover:bg-slate/30"
                                       >
-                                        <span className="truncate font-mono text-signal">
+                                        <span className="min-w-0 flex-1 truncate font-mono text-signal">
                                           {s.label}
+                                        </span>
+                                        <span className="max-w-[170px] truncate font-mono text-[0.6rem] text-ink-muted">
+                                          {s.url.replace(/^https?:\/\//, "").slice(0, 48)}
                                         </span>
                                         <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
                                       </a>
                                     </li>
                                   ))}
                                 </ul>
-                              </HoverCardContent>
-                            </HoverCard>
-                          ) : (
-                            <span className="label-mono text-muted-foreground">
-                              {entry.independentSources} independent source
-                              {entry.independentSources === 1 ? "" : "s"}
-                            </span>
-                          )}
+                              ) : (
+                                <p className="mt-2 text-xs leading-relaxed text-ink-muted">
+                                  Links for this run were not stored. Re-run and they will show here — each opens in a new tab so you can read the X / Medium / news post yourself and decide how to reach them.
+                                </p>
+                              )}
+                            </HoverCardContent>
+                          </HoverCard>
+                          <span className="font-mono text-[0.6rem] text-ink-muted">
+                            hover or click
+                          </span>
                         </div>
                       </li>
                     ))}

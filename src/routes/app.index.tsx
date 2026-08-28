@@ -674,11 +674,6 @@ function Intelligence() {
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed">
                               {entry.topClaim}
                             </p>
-                            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
-                              This signal suggests a near-term need that matches what you are trying
-                              to move — worth checking the sources below yourself before you commit
-                              stock.
-                            </p>
                           </div>
                           <div className="text-right shrink-0">
                             <p className="font-mono text-3xl text-signal">{entry.confidence}%</p>

@@ -16,6 +16,7 @@ export type SubmittedClaim = {
   claim: string;
   confidence: number;
   evidence: SubmittedEvidence[];
+  whyRelevant?: string | null;
 };
 
 export type GradedClaim = SubmittedClaim & {

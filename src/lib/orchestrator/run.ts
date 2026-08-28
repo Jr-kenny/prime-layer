@@ -325,6 +325,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
     claim: row.claim,
     confidence: row.confidence,
     evidence: JSON.parse(row.evidenceJson) as SubmittedClaim["evidence"],
+    whyRelevant: (row as { whyRelevant?: string | null }).whyRelevant ?? null,
   }));
 
   const { graded, totalClusters } = gradeClaims({ claims: submitted, agents: agentMap });
@@ -506,7 +507,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
         confidence,
         claims: list.length,
         independentSources: clusters.size,
-        topClaim: top.claim,
+        topClaim: top.whyRelevant?.trim() || top.claim,
         sources: Array.from(sourceMap.values()).slice(0, 6),
         contributingAgents: Array.from(new Set(list.map((c) => c.agentId))),
       };

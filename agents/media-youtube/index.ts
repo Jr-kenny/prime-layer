@@ -1,93 +1,37 @@
 /**
- * Prime Signals — Prime Layer's own first-party search agent.
+ * Media YouTube — First-class YouTube research pipeline.
  *
- * A production-grade reference connector: it registers on the grid like any
- * external developer agent, receives research commands, performs REAL research
- * against free public sources (Google News RSS + GDELT), extracts companies
- * showing expansion/construction/opening signals, and submits graded-ready
- * claims with verifiable source URLs.
+ * Steps (per spec §8):
+ * 1. Discover relevant videos (YouTube Data API v3)
+ * 2. Retrieve metadata
+ * 3. Obtain transcript/captions where available (timedtext)
+ * 4. Analyze transcript
+ * 5. Identify entities
+ * 6. Extract claims
+ * 7. Extract project info
+ * 8. Link entities to existing evidence
+ * 9. Generate follow-up investigations
+ * 10. Store source and exact evidence supporting the claim
  *
- *   bun run agents/prime-signals/index.ts [--port 8790]
+ *   bun run agents/media-youtube/index.ts [--port 8797]
  *
  * Env:
  *   PRIME_ORCHESTRATOR  orchestrator base URL (default http://localhost:8081)
- *   CONNECTOR_PORT      listener port (default 8790)
- *   CONNECTOR_WALLET    settlement address; a fresh wallet is generated if unset
- *   SIGNALS_GDELT       "off" disables the GDELT source (default on)
+ *   CONNECTOR_PORT      listener port (default 8797)
+ *   CONNECTOR_WALLET    settlement address
+ *   YOUTUBE_API_KEY     YouTube Data API v3 key (if unset, agent declines gracefully)
  */
 
 import { ethers } from "ethers";
 
 const ORCHESTRATOR = process.env["PRIME_ORCHESTRATOR"] ?? "http://localhost:8081";
 const PORT = Number(process.env["CONNECTOR_PORT"] ?? 8797);
-const GDELT_ENABLED = (process.env["SIGNALS_GDELT"] ?? "on").toLowerCase() !== "off";
+const YOUTUBE_API_KEY = process.env["YOUTUBE_API_KEY"]?.trim() ?? "";
 
-const NAME = "media-youtube — Media — YouTube interviews pod";
-const SPECIALTY =
-  "global news sweep: expansion, construction, opening and investment signals across hotels, manufacturing, logistics and retail";
+const NAME = "media-youtube — Media — YouTube interviews podcasts audiovisual";
+const SPECIALTY = "Media — YouTube interviews podcasts audiovisual — discovers videos, extracts transcripts, identifies projects and entities";
 
-const wallet =
-  process.env["CONNECTOR_WALLET"] ??
-  new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address;
-
-// ─── Signal vocabulary ──────────────────────────────────────────────────────
-
-/** Title-level verbs/phrases that indicate a company's situation is CHANGING. */
-const SIGNAL_RE =
-  /\b(expansion|expand[s]?|opens?|opening|inaugurat\w*|commission\w*|groundbreak\w*|breaks ground|broke ground|construction|to build|building|set to open|new (hotel|factory|plant|facility|store|branch|warehouse|terminal|refinery|mill)|flagship|launch(es|ed)?|unveil\w*|acquir(es|ed)?|acquisition|merger|invest(s|ed|ment)?|funding|raise[sd]?|refurbish\w*|renovat\w*|fit-out|fitout)\b/i;
-
-const STOPWORDS = new Set(
-  (
-    "a an and are as at be been by for find from has have how i in into is it its me my of on " +
-    "or our sell selling show that the their them they this to us want was we what which who " +
-    "will with you your become becoming likely need needs companies company business businesses " +
-    "give tell looking show showing evidence real some just about across between more most new " +
-    "can could should would were than then when where while who's let's"
-  ).split(" "),
-);
-
-/**
- * Words that look like proper nouns in headlines but are places, people,
- * nationalities or news-desk furniture — never a company we can name.
- * Deliberately GLOBAL: the grid sources worldwide, not one region.
- */
-const NOT_A_COMPANY = new Set(
-  (
-    "nigeria nigerian nigerians lagos abuja ghana ghanaian kenya kenyan nairobi africa african " +
-    "egypt egyptian cairo southafrica johannesburg europe european america american british " +
-    "london dubai asia asian ogun ogunstate ibadan kano abia rivers kaduna enugu anambra delta " +
-    "oyo oyoState kwara osun ondo edo katsina sokoto borno yobe adamawa taraba benue plateau " +
-    "nasarawa niger zamfara kebbi jigawa gombe ekiti china chinese chineseaided ecowas " +
-    "tinubu obi atiku buhari president minister governor senate house government federal state " +
-    "updated breaking exclusive analysis opinion report reports video photos watch " +
-    "monday tuesday wednesday thursday friday saturday sunday january february march april " +
-    "may june july august september october november december today yesterday tomorrow " +
-    "usa uk britain france french germany german india indian brazil canadian canada " +
-    "australia australian japan japanese indonesia indonesian vietnam vietnamese mexico " +
-    "spain spanish italy italian turkey turkish uae saudi emirates russia russian ukraine " +
-    "israel israeli gaza iran iraq syria pakistan bangladesh philippines malaysia singapore " +
-    "texas california florida york jersey ceo cfo coo founder chairman director"
-  ).split(" "),
-);
-
-/** Bare headline verbs — a candidate containing one is a fragment, not a name. */
-const HEADLINE_VERBS = new Set(
-  (
-    "launches launched launch opens opened opening unveils unveiled moves moved says said " +
-    "plans planned begins began begins signs signed gets got wins won hosts hosted faces faced " +
-    "enhancing enhance expands expanded grows growing rises rising falls falling cuts cutting " +
-    "approves approves rejects joins joins leads led takes took sets set targets targets"
-  ).split(" "),
-);
-
-/** Generic nouns — alone, they are commodities or sectors, never a company. */
-const GENERIC_SINGLE_NOUNS = new Set(
-  (
-    "oil gas gold power energy cement bank banks hotel hotels factory factories plant plants " +
-    "sugar flour steel mine mines port ports road roads bridge bridges estate estates " +
-    "government ministry agency authority commission council association union group"
-  ).split(" "),
-);
+const wallet = process.env["CONNECTOR_WALLET"] ?? new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address;
 
 type Evidence = { item: string; source: string; observed: string };
 type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string; contact?: string };
@@ -102,571 +46,204 @@ type ResearchCommand = {
   submit_url: string;
 };
 
-// ─── Query building ─────────────────────────────────────────────────────────
+let agentId: string | null = null;
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function buildQueries(cmd: ResearchCommand): string[] {
-  // Hypotheses-aware: use the orchestrator's search hints first — they already encode
-  // inventory→demand reasoning (hotel construction, street-lighting etc.), not just keywords.
   if (cmd.hypotheses?.length) {
-    const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
-    if (hints.length >= 2) {
+    const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 4);
+    if (hints.length) {
       const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
-      return hints.map((q) => `${q}${geo}`.trim());
+      // Bias toward video-rich queries
+      return hints.map((q) => `${q} tour construction project${geo}`.trim());
     }
   }
-  const geo = cmd.scope.geography ?? "";
-  const words = cmd.question
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 2 && !STOPWORDS.has(w) && !/^\d+$/.test(w));
-
-  // Drop the geography word from the topic list so it isn't doubled up.
-  const geoLower = geo.toLowerCase();
-  const topicWords = words.filter((w) => w !== geoLower);
-  const topic = Array.from(new Set(topicWords)).slice(0, 5).join(" ");
-
-  const queries: string[] = [];
-  if (topic && geo) queries.push(`${topic} ${geo}`);
-  if (topic && !geo) queries.push(topic);
-  if (geo) queries.push(`${geo} (new hotel OR factory OR plant OR warehouse OR headquarters)`);
-  return Array.from(new Set(queries)).slice(0, 2);
+  const base = cmd.scope.category ?? cmd.question.slice(0, 60);
+  const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
+  return [`${base} construction tour${geo}`, `${base} project announcement${geo}`].slice(0, 2);
 }
 
-// ─── Sources ────────────────────────────────────────────────────────────────
-
-type RawSignal = {
-  title: string;
-  link: string;
-  publisherUrl: string | null;
-  publishedAt: string; // ISO date (yyyy-mm-dd)
-  /** "filing" = primary regulatory source, outranks news in scoring. */
-  origin: "news" | "filing";
-  /** EDGAR gives us the exact registrant name — skip headline extraction. */
-  companyOverride?: string | null;
-  /** The topic keyword this signal matched (for relevance gating). */
-  topicMatched?: string | null;
-};
-
-async function fetchGoogleNews(query: string): Promise<RawSignal[]> {
+async function discoverVideos(query: string): Promise<{ videoId: string; title: string; channel: string; publishedAt: string; description: string }[]> {
+  if (!YOUTUBE_API_KEY) return [];
   const url =
-    `https://news.google.com/rss/search?q=${encodeURIComponent(query)}` +
-    "&hl=en-US&gl=US&ceid=US:en";
-  const res = await fetch(url, {
-    headers: { "user-agent": "Mozilla/5.0 (compatible; PrimeSignals/1.0)" },
-    signal: AbortSignal.timeout(12_000),
-  });
-  if (!res.ok) throw new Error(`google news ${res.status}`);
-  const xml = await res.text();
-
-  const signals: RawSignal[] = [];
-  const items = xml.match(/<item>[\s\S]*?<\/item>/g) ?? [];
-  for (const item of items.slice(0, 15)) {
-    const title = tag(item, "title");
-    const link = tag(item, "link");
-    const pubDate = tag(item, "pubDate");
-    const sourceUrl = item.match(/<source[^>]*url="([^"]+)"/)?.[1] ?? null;
-    if (!title || !link) continue;
-    signals.push({
-      title,
-      link,
-      publisherUrl: sourceUrl,
-      publishedAt: toDate(pubDate ?? "") ?? new Date().toISOString().slice(0, 10),
-      origin: "news",
-    });
-  }
-  return signals;
-}
-
-async function fetchGdelt(query: string): Promise<RawSignal[]> {
-  const url =
-    "https://api.gdeltproject.org/api/v2/doc/doc?query=" +
+    "https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=" +
     encodeURIComponent(query) +
-    "&mode=ArtList&maxrecords=15&format=json&timespan=7d";
-  await sleep(5_200); // GDELT asks for 1 request / 5s
-  const res = await fetch(url, { signal: AbortSignal.timeout(12_000) });
-  if (!res.ok) throw new Error(`gdelt ${res.status}`);
-  const text = await res.text();
-  if (!text.startsWith("{")) throw new Error("gdelt rate limited");
-  const data = JSON.parse(text) as {
-    articles?: { title?: string; url?: string; seendate?: string; domain?: string }[];
+    "&key=" +
+    YOUTUBE_API_KEY;
+  const res = await fetch(url, { signal: AbortSignal.timeout(8000) });
+  if (!res.ok) throw new Error(`youtube search ${res.status}`);
+  const data = (await res.json()) as {
+    items?: { id: { videoId: string }; snippet: { title: string; channelTitle: string; publishedAt: string; description: string } }[];
   };
-  return (data.articles ?? [])
-    .filter((a) => a.title && a.url)
-    .map((a) => ({
-      title: a.title!,
-      link: a.url!,
-      publisherUrl: a.domain ? `https://${a.domain}` : null,
-      // seendate format: 20260823T091500Z
-      publishedAt: toDate(a.seendate ?? "") ?? new Date().toISOString().slice(0, 10),
-      origin: "news" as const,
-    }));
+  return (data.items ?? []).map((it) => ({
+    videoId: it.id.videoId,
+    title: it.snippet.title,
+    channel: it.snippet.channelTitle,
+    publishedAt: (it.snippet.publishedAt ?? new Date().toISOString()).slice(0, 10),
+    description: it.snippet.description ?? "",
+  }));
 }
 
-/**
- * SEC EDGAR full-text search — PRIMARY-source signals, free, no key.
- * Companies disclose expansions, new facilities and material deals in 8-K
- * filings; these outrank any news story because they come from the company
- * itself under legal penalty. Requires a descriptive User-Agent per SEC policy.
- */
-const EDGAR_UA =
-  process.env["EDGAR_USER_AGENT"]?.trim() ||
-  "PrimeLayer-Signals/1.0 (research; contact@prime-layer.example)";
-
-async function fetchEdgar(topics: string[]): Promise<RawSignal[]> {
-  const since = new Date(Date.now() - 45 * 86_400_000).toISOString().slice(0, 10);
-  const today = new Date().toISOString().slice(0, 10);
-  const signals: RawSignal[] = [];
-
-  for (const topic of topics.slice(0, 2)) {
-    const url =
-      "https://efts.sec.gov/LATEST/search-index?q=" +
-      encodeURIComponent(topic) +
-      `&dateRange=custom&startdt=${since}&enddt=${today}&forms=8-K&size=20`;
-    const res = await fetch(url, {
-      headers: { "user-agent": EDGAR_UA },
-      signal: AbortSignal.timeout(12_000),
-    });
-    if (!res.ok) throw new Error(`edgar ${res.status}`);
-    const data = JSON.parse(await res.text()) as {
-      hits?: {
-        hits?: {
-          _source?: {
-            display_names?: string[];
-            ciks?: number[];
-            file_date?: string;
-            form?: string;
-          };
-          _id?: string; // "ACCESSION_NO:filename.htm"
-        }[];
-      };
-    };
-    for (const hit of data.hits?.hits ?? []) {
-      const src = hit._source;
-      // EDGAR display names append "(TICKERS) (CIK …)" — strip parentheticals.
-      const rawName = src?.display_names?.[0] ?? "";
-      const company = rawName
-        .replace(/\s*\([^)]*\)/g, "")
-        .replace(/\s+/g, " ")
-        .trim();
-      const cik = src?.ciks?.[0];
-      const [accession, filename] = (hit._id ?? "").split(":");
-      if (!company || !cik || !accession || !filename) continue;
-      const link = `https://www.sec.gov/Archives/edgar/data/${cik}/${accession.replace(/-/g, "")}/${filename}`;
-      signals.push({
-        title: `${company} files ${src?.form ?? "8-K"} citing ${topic}`,
-        link,
-        publisherUrl: "https://www.sec.gov",
-        publishedAt: src?.file_date ?? today,
-        origin: "filing",
-        companyOverride: cleanName(company),
-        topicMatched: topic,
-      });
-    }
-  }
-  return signals;
-}
-
-// ─── Extraction ─────────────────────────────────────────────────────────────
-
-/** Pull the company name out of a headline using common news patterns. */
-function extractCompany(title: string): string | null {
-  const head = title.replace(/\s+-\s+[^-]+$/, "").trim(); // drop "- Publisher"
-
-  const patterns: RegExp[] = [
-    /^(?:Nigeria's|Ghana's|Kenya's|South Africa's|Egypt's)?\s*(.{3,60}?)\s+(?:opens?|opened|inaugurates?|commissions?|unveils?|launches|launched|expands?|begins|started?|breaks ground|broke ground|debuts)\b/i,
-    /^(.{3,60}?)\s+(?:to|set to|will)\s+(?:open|build|construct|launch|expand|commission|establish)\b/i,
-    /\$(?:[\d,.]+)\s*(?:bn|billion|m|million)?\s+(?:investment|loan|facility|deal|fund)\s+(?:in|for|to)\s+(.{3,60}?)(?:\s*[,-–]|\s|$)/i,
-    /^(.{3,60}?)\s+(?:has|have)\s+(?:opened|launched|started|begun|completed|announced)\b/i,
+async function fetchTranscript(videoId: string): Promise<string | null> {
+  // Try YouTube timedtext (public captions). If unavailable, return null and caller falls back to description.
+  const urls = [
+    `https://www.youtube.com/api/timedtext?lang=en&v=${videoId}`,
+    `https://www.youtube.com/api/timedtext?lang=en-US&v=${videoId}`,
   ];
-  for (const re of patterns) {
-    const m = head.match(re);
-    if (m?.[1]) {
-      const name = cleanName(m[1]);
-      if (name) return name;
-    }
+  for (const u of urls) {
+    try {
+      const res = await fetch(u, { signal: AbortSignal.timeout(5000), headers: { "user-agent": "Mozilla/5.0" } });
+      if (!res.ok) continue;
+      const xml = await res.text();
+      if (!xml || xml.includes("<?xml") === false || xml.trim() === "") continue;
+      // Extract <text> nodes
+      const texts = [...xml.matchAll(/<text[^>]*>([^<]*)<\/text>/g)].map((m) => m[1].replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&amp;/g, "&"));
+      if (texts.length > 5) return texts.join(" ").slice(0, 4000);
+    } catch {}
   }
-  // Pattern verbs failed — only trust the capitalised-run fallback when a
-  // strong signal verb is present in the headline.
-  if (!SIGNAL_RE.test(head)) return null;
-  const cap = head.match(/\b([A-Z][A-Za-z&.'-]+(?:\s+[A-Z][A-Za-z&.'-]+){0,3})/);
-  return cap ? cleanName(cap[1]) : null;
+  return null;
 }
 
-function cleanName(raw: string): string | null {
-  const name = raw
-    .replace(/^(the|a|an)\s+/i, "")
-    .replace(/\s+(?:as|and|with|for|in|at|to|by|from)$/i, "")
-    .replace(/[.,;:]$/, "")
-    .trim();
-  if (name.length < 3 || name.length > 70) return null;
-  if (/^(news|update|report|weekly|daily|breaking)$/i.test(name)) return null;
-
-  const tokens = name.toLowerCase().split(/\s+/);
-  const meaningful = tokens.filter((t) => !/^(of|the|and|for|in|new)$/i.test(t) && t.length > 1);
-  if (meaningful.length === 0) return null;
-  // Every meaningful token is a place/person/news-desk word -> not a company.
-  if (meaningful.every((t) => NOT_A_COMPANY.has(t.replace(/[^a-z]/g, "")))) return null;
-  // A headline verb inside the candidate means we grabbed a clause fragment.
-  if (meaningful.some((t) => HEADLINE_VERBS.has(t))) return null;
-  // Possessive endings ("Nigeria's") betray a place-led fragment.
-  if (/^[a-z]+'s$/i.test(tokens[0] ?? "")) return null;
-  // A lone generic noun ("Oil", "Hotel") is a sector, not an operator.
-  if (meaningful.length === 1 && GENERIC_SINGLE_NOUNS.has(meaningful[0]!.replace(/[^a-z]/g, ""))) {
-    return null;
-  }
+function extractCompany(title: string): string | null {
+  // Reuse simple extraction: first capitalized phrase that looks like a company
+  const m = title.match(/\b([A-Z][A-Za-z&.'-]+(?:\s+[A-Z][A-Za-z&.'-]+){0,2})\b/);
+  if (!m) return null;
+  const name = m[1].trim().replace(/^(The|A|An)\s+/i, "");
+  if (name.length < 3 || name.length > 60) return null;
+  if (/^(Tour|Video|Project|Construction|Building|New|Update|Report)$/i.test(name)) return null;
   return name;
 }
 
-function scoreSignal(signal: RawSignal): number {
-  // Primary regulatory filings start high — the company said it itself.
-  let confidence = signal.origin === "filing" ? 0.78 : 0.58;
-  const t = signal.title;
-  // Concrete capacity or money mentioned -> stronger signal.
-  if (
-    /\$\s?[\d,.]+/.test(t) ||
-    /\b\d{3,}\s*(rooms|beds|sqm|hectares|units|containers|tonnes)\b/i.test(t)
-  ) {
-    confidence += 0.12;
+async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
+  if (!YOUTUBE_API_KEY) {
+    await decline(cmd, "YouTube API key not configured — skipping video research");
+    return;
   }
-  // Fresh observations score higher than stale ones.
-  const ageDays = (Date.now() - Date.parse(signal.publishedAt)) / 86_400_000;
-  if (Number.isFinite(ageDays)) {
-    if (ageDays <= 2) confidence += 0.08;
-    else if (ageDays <= 7) confidence += 0.04;
-  }
-  return Math.min(0.92, Number(confidence.toFixed(2)));
-}
-
-/**
- * Topic relevance gate: at least one meaningful inquiry word must appear in
- * the headline (or the story is about a different universe of companies).
- */
-function isRelevant(title: string, topicWords: string[]): boolean {
-  const lower = title.toLowerCase();
-  return topicWords.some((w) => lower.includes(w));
-}
-
-/** Merge key: normalised company name across ALL sources. */
-function mergeKey(name: string): string {
-  return name
-    .toLowerCase()
-    .replace(
-      /\b(group|plc|ltd|limited|inc|incorporated|corp|corporation|company|holdings|international|intl)\b/g,
-      "",
-    )
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
-  // Topic vocabulary from the actual question — used for relevance gating.
-  const geo = cmd.scope.geography ?? "";
-  const topicWords = cmd.question
-    .toLowerCase()
-    .replace(/[^a-z0-9\s]/g, " ")
-    .split(/\s+/)
-    .filter((w) => w.length > 3 && !STOPWORDS.has(w) && w !== geo.toLowerCase());
-
-  // Pass 1 — collect qualifying signals per merged company.
-  interface Bucket {
-    name: string;
-    best: RawSignal;
-    all: RawSignal[];
-    filingSeen: boolean;
-  }
-  const buckets = new Map<string, Bucket>();
-
-  for (const s of signals) {
-    // Filing-derived signals carry their registrant; news needs extraction.
-    const company = s.companyOverride ?? extractCompany(s.title);
-    if (!company) continue;
-
-    // Relevance: filings matched the query by construction; news must prove it.
-    if (!s.companyOverride && !isRelevant(s.title, topicWords)) continue;
-    if (s.companyOverride && s.topicMatched && !isRelevant(company, [s.topicMatched])) {
-      // registrant name doesn't contain the topic — that's fine, the FILING
-      // text did; keep it.
+  const queries = buildQueries(cmd);
+  const allVideos: Awaited<ReturnType<typeof discoverVideos>> = [];
+  for (const q of queries) {
+    try {
+      const vids = await discoverVideos(q);
+      allVideos.push(...vids);
+    } catch (e) {
+      console.error(`youtube discover failed for "${q}":`, (e as Error).message);
     }
-
-    const key = mergeKey(company);
-    if (!key) continue;
-    const bucket = buckets.get(key);
-    if (bucket) {
-      bucket.all.push(s);
-      bucket.filingSeen ||= s.origin === "filing";
-      if (scoreSignal(s) > scoreSignal(bucket.best)) bucket.best = s;
-    } else {
-      buckets.set(key, {
-        name: company,
-        best: s,
-        all: [s],
-        filingSeen: s.origin === "filing",
-      });
-    }
+    await new Promise((r) => setTimeout(r, 300));
+  }
+  if (allVideos.length === 0) {
+    await decline(cmd, "No relevant videos found");
+    return;
   }
 
-  // Pass 2 — one claim per company, every distinct source attached as evidence.
   const claims: Claim[] = [];
-  for (const bucket of buckets.values()) {
-    const seenClusters = new Set<string>();
-    const evidence: Evidence[] = [];
-    for (const s of bucket.all.sort((a, b) => scoreSignal(b) - scoreSignal(a))) {
-      // Filings: cite the exact document. News: cite the publisher (the
-      // article link is a redirect; the domain is the stable cluster key).
-      const source = s.origin === "filing" ? s.link : (s.publisherUrl ?? s.link);
-      const cluster = sourceClusterKey(source);
-      if (seenClusters.has(cluster)) continue;
-      seenClusters.add(cluster);
-      evidence.push({ item: s.title, source, observed: s.publishedAt });
-      if (evidence.length >= 4) break;
-    }
+  for (const v of allVideos.slice(0, 6)) {
+    const videoUrl = `https://www.youtube.com/watch?v=${v.videoId}`;
+    const transcript = await fetchTranscript(v.videoId);
+    const content = transcript ?? v.description ?? v.title;
+    const company = extractCompany(v.title) ?? v.channel ?? "Unknown Developer";
+    const observed = v.publishedAt;
 
-    let confidence = scoreSignal(bucket.best);
-    // Independent corroboration across sources lifts confidence — real
-    // multi-source confirmation, not five copies of one article.
-    const distinctHosts = new Set(evidence.map((e) => sourceClusterKey(e.source).split("/")[0]));
-    if (distinctHosts.size >= 2) confidence += 0.06;
-    if (bucket.filingSeen) confidence += 0.04;
-    confidence = Math.min(0.92, Number(confidence.toFixed(2)));
+    // Simple project info extraction from title/description/transcript
+    const hasProject = /hotel|estate|mall|hospital|plant|factory|building|development|construction/i.test(content);
+    if (!hasProject) continue;
 
-    // Why this lead matters for THIS buyer — turns a headline into a sales reason.
-    const buyerHint = (cmd.scope.category ?? cmd.question).slice(0, 80);
-    const verb = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion signal";
-    const whyRelevant = `${bucket.name} shows ${verb.toLowerCase()} — likely needs ${buyerHint} soon. Worth checking the ${evidence.length} source${evidence.length === 1 ? "" : "s"} before you commit stock elsewhere.`.slice(
-      0,
-      280,
-    );
+    const item = transcript
+      ? `Video "${v.title}" by ${v.channel}: transcript reveals ${content.slice(0, 180)}...`
+      : `Video "${v.title}" by ${v.channel}: ${v.description.slice(0, 180)}`;
 
-    // Contact: when an individual is the business (X/Medium/LinkedIn post tied 1:1
-    // to the name), the source itself is the contact — only when sure.
-    let contact: string | undefined;
-    if (evidence.length <= 2 && evidence[0]?.source) {
-      try {
-        const host = new URL(evidence[0].source).hostname.replace(/^www\./, "").toLowerCase();
-        const isSocial =
-          ["x.com", "twitter.com", "medium.com", "linkedin.com", "youtube.com", "instagram.com", "tiktok.com"].includes(host) ||
-          host.endsWith(".medium.com");
-        if (isSocial) contact = evidence[0].source;
-      } catch {}
-    }
+    const hint = (cmd.scope.category ?? cmd.question).slice(0, 60);
+    const why = `${company} appears in video "${v.title.slice(0, 40)}" — shows active construction/development, likely needs ${hint} soon. Check video for scale and contacts.`.slice(0, 280);
 
     claims.push({
-      company: bucket.name,
-      claim: bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
-      confidence,
-      evidence,
-      why_relevant: whyRelevant,
-      ...(contact ? { contact } : {}),
+      company,
+      claim: v.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
+      confidence: transcript ? 0.72 : 0.58,
+      evidence: [{ item: item.slice(0, 300), source: videoUrl, observed }],
+      why_relevant: why,
+      // If channel looks like individual, treat video URL as contact (individual==business when sure)
+      ...(v.channel && v.channel.length < 40 ? { contact: videoUrl } : {}),
     });
-    if (claims.length >= 8) break;
+    if (claims.length >= 5) break;
   }
 
-  // Strongest first.
-  claims.sort((a, b) => b.confidence - a.confidence);
-  return claims;
+  if (claims.length === 0) {
+    await decline(cmd, "Videos found but no project signals extracted");
+    return;
+  }
+
+  await submitClaims(cmd, claims);
 }
 
-export function sourceClusterKey(source: string): string {
-  const raw = source.trim();
+async function submitClaims(cmd: ResearchCommand, claims: Claim[]): Promise<void> {
+  const res = await fetch(cmd.submit_url, {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      command_id: cmd.command_id,
+      inquiry_id: cmd.inquiry_id,
+      agent_id: agentId,
+      claims: claims.map((c) => ({
+        company: c.company,
+        claim: c.claim,
+        confidence: c.confidence,
+        evidence: c.evidence,
+        why_relevant: c.why_relevant,
+        ...(c.contact ? { contact: c.contact } : {}),
+      })),
+    }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) console.error(`submit failed ${res.status}:`, await res.text().catch(() => ""));
+  else console.log(`youtube agent submitted ${claims.length} claims for ${cmd.inquiry_id}`);
+}
+
+async function decline(cmd: ResearchCommand, reason: string): Promise<void> {
   try {
-    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
-    const host = u.hostname.toLowerCase().replace(/^www\./, "");
-    const path = u.pathname.replace(/\/+$/, "") || "/";
-    const tracking = new Set([
-      "utm_source",
-      "utm_medium",
-      "utm_campaign",
-      "utm_term",
-      "utm_content",
-      "utm_id",
-      "fbclid",
-      "gclid",
-      "msclkid",
-      "igshid",
-      "mc_cid",
-      "mc_eid",
-      "_hsenc",
-      "_hsmi",
-      "yclid",
-    ]);
-    const kept: [string, string][] = [];
-    u.searchParams.forEach((v, k) => {
-      if (!tracking.has(k.toLowerCase()) && !k.toLowerCase().startsWith("utm_")) kept.push([k, v]);
+    await fetch(cmd.submit_url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ command_id: cmd.command_id, inquiry_id: cmd.inquiry_id, agent_id: agentId, claims: [] }),
+      signal: AbortSignal.timeout(5000),
     });
-    kept.sort(([a], [b]) => a.localeCompare(b));
-    const query = kept.length ? `?${kept.map(([k, v]) => `${k}=${v}`).join("&")}` : "";
-    return `${host}${path}${query}`.toLowerCase();
-  } catch {
-    return source.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
-  }
+    console.log(`youtube decline ${cmd.inquiry_id}: ${reason}`);
+  } catch {}
 }
-
-// ─── Grid plumbing ──────────────────────────────────────────────────────────
-
-let agentId: string | null = null;
-
-// Public URL other hosts use to reach this agent (registered with the
-// orchestrator). Defaults to localhost for local dev grids.
-const PUBLIC_URL = process.env["CONNECTOR_PUBLIC_URL"] ?? `http://localhost:${PORT}`;
 
 async function register(): Promise<string> {
   const res = await fetch(`${ORCHESTRATOR}/api/agents/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      name: NAME,
-      specialty: SPECIALTY,
-      endpoint: `${PUBLIC_URL}/claim`,
-      wallet,
-    }),
-    signal: AbortSignal.timeout(10_000),
+    body: JSON.stringify({ name: NAME, specialty: SPECIALTY, endpoint: `http://localhost:${PORT}/claim`, wallet }),
+    signal: AbortSignal.timeout(5000),
   });
-  const body = (await res.json()) as { agent_id?: string; error?: string };
-  if (!res.ok || !body.agent_id) {
-    throw new Error(`registration failed: ${body.error ?? res.status}`);
-  }
-  return body.agent_id;
+  if (!res.ok) throw new Error(`register ${res.status}: ${await res.text()}`);
+  const data = (await res.json()) as { agent_id: string };
+  agentId = data.agent_id;
+  console.log(`YouTube agent registered as ${agentId} → ${NAME} on :${PORT}`);
+  return agentId;
 }
 
-async function researchAndSubmit(command: ResearchCommand) {
-  try {
-    const queries = buildQueries(command);
-    console.log(`→ CMD ${command.command_id} · queries:`, queries);
-
-    const signals: RawSignal[] = [];
-    for (const q of queries) {
-      try {
-        signals.push(...(await fetchGoogleNews(q)));
-      } catch (err) {
-        console.warn("  google news failed:", err instanceof Error ? err.message : err);
-      }
-      if (GDELT_ENABLED) {
-        try {
-          signals.push(...(await fetchGdelt(q)));
-        } catch (err) {
-          console.warn("  gdelt failed:", err instanceof Error ? err.message : err);
-        }
-      }
-    }
-    // Primary sources: SEC filings mentioning the inquiry's core topics.
-    const topicWords = command.question
-      .toLowerCase()
-      .replace(/[^a-z0-9\s]/g, " ")
-      .split(/\s+/)
-      .filter((w) => w.length > 4 && !STOPWORDS.has(w));
-    if (topicWords.length > 0) {
-      try {
-        signals.push(...(await fetchEdgar(topicWords)));
-        console.log("  edgar signals fetched");
-      } catch (err) {
-        console.warn("  edgar failed:", err instanceof Error ? err.message : err);
-      }
-    }
-    console.log(`  raw signals: ${signals.length}`);
-
-    const claims = toClaims(signals, command);
-    if (claims.length === 0) {
-      await decline(command);
-      return;
-    }
-
-    const res = await fetch(command.submit_url, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        command_id: command.command_id,
-        inquiry_id: command.inquiry_id,
-        agent_id: agentId,
-        claims,
-      }),
-      signal: AbortSignal.timeout(10_000),
-    });
-    const body = await res.json();
-    if (res.ok) {
-      console.log(`✓ submitted ${claims.length} claim(s):`);
-      for (const c of claims) {
-        console.log(
-          `    • ${c.company} @ ${(c.confidence * 100).toFixed(0)}% ← ${c.evidence[0]?.source}`,
-        );
-      }
-    } else {
-      console.warn("✗ submission rejected:", body);
-    }
-  } catch (err) {
-    console.error("research failure:", err);
-  }
-}
-
-async function decline(command: ResearchCommand) {
-  await fetch(command.submit_url, {
-    method: "POST",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify({
-      command_id: command.command_id,
-      inquiry_id: command.inquiry_id,
-      agent_id: agentId,
-      claims: [],
-    }),
-    signal: AbortSignal.timeout(10_000),
-  }).catch(() => undefined);
-  console.log("✗ declined (no qualifying signals)");
-}
-
-// ─── Utils ──────────────────────────────────────────────────────────────────
-
-function tag(xml: string, name: string): string | null {
-  const m = xml.match(new RegExp(`<${name}>([\\s\\S]*?)</${name}>`));
-  if (!m?.[1]) return null;
-  return m[1]
-    .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, "$1")
-    .replace(/&amp;/g, "&")
-    .replace(/&lt;/g, "<")
-    .replace(/&gt;/g, ">")
-    .replace(/&#39;/g, "'")
-    .replace(/&quot;/g, '"')
-    .trim();
-}
-
-function toDate(raw: string): string | null {
-  if (/^\d{8}T\d{6}Z$/.test(raw)) {
-    const iso = `${raw.slice(0, 4)}-${raw.slice(4, 6)}-${raw.slice(6, 8)}`;
-    return iso;
-  }
-  const d = raw ? new Date(raw) : null;
-  return d && !Number.isNaN(d.getTime()) ? d.toISOString().slice(0, 10) : null;
-}
-
-function sleep(ms: number) {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-// ─── Boot ───────────────────────────────────────────────────────────────────
-
-await main();
+// ─── HTTP server ──────────────────────────────────────────────────────────
 
 async function main() {
-  agentId = await register();
-  console.log(`✓ ${NAME} registered · id=${agentId} · wallet=${wallet}`);
-
-  // Public URL other hosts use to reach this agent (registered with the
-  // orchestrator). Defaults to localhost for local dev grids.
-  Bun.serve({
+  await register();
+  const server = Bun.serve({
     port: PORT,
     hostname: "0.0.0.0",
-    async fetch(request) {
-      const url = new URL(request.url);
-      if (request.method === "POST" && url.pathname === "/claim") {
-        const command = (await request.json()) as ResearchCommand;
-        void researchAndSubmit(command); // async; window stays open
-        return Response.json({ accepted: true });
+    async fetch(request: Request): Promise<Response> {
+      if (request.method !== "POST") return new Response("media-youtube alive", { status: 200 });
+      try {
+        const cmd = (await request.json()) as ResearchCommand;
+        // fire-and-forget research so we return quickly
+        void researchAndSubmit(cmd).catch((e) => console.error("youtube research error:", e));
+        return new Response(JSON.stringify({ ok: true }), { headers: { "content-type": "application/json" } });
+      } catch (e) {
+        return new Response(JSON.stringify({ error: String(e) }), { status: 400, headers: { "content-type": "application/json" } });
       }
-      if (url.pathname === "/health") {
-        return Response.json({ ok: true, agent: NAME, agentId });
-      }
-      return new Response("prime-signals connector", { status: 200 });
     },
   });
-
-  console.log(`✓ listening on ${PUBLIC_URL}/claim`);
+  console.log(`YouTube agent listening on http://localhost:${server.port}/claim`);
 }
+
+if (import.meta.main) void main();

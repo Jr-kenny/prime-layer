@@ -28,6 +28,7 @@ import { grantFailureCredit } from "./credits";
 import { generateHypotheses } from "./hypothesis";
 import { buildInitialInvestigation } from "./investigation";
 import { buildEvidenceGraph } from "./evidence-graph";
+import { computeBreakdown, detectContradictions } from "./scoring";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
@@ -39,6 +40,11 @@ export const SOURCING_WINDOW_SECONDS = Math.min(
   3600,
   Math.max(60, Number(process.env["PRIME_SOURCING_WINDOW_SECONDS"] ?? 90)),
 );
+
+// Controlled research graph traversal budgets (per §6)
+export const MAX_DEPTH = Number(process.env["PRIME_MAX_DEPTH"] ?? 3);
+export const MAX_SOURCES = Number(process.env["PRIME_MAX_SOURCES"] ?? 30);
+export const TOKEN_BUDGET = Number(process.env["PRIME_TOKEN_BUDGET"] ?? 120000);
 
 export type ResearchCommand = {
   command_id: string;
@@ -397,8 +403,16 @@ export async function gradeAndSynthesize(inquiryId: string) {
       : [],
   );
 
+  // Budgets — cap sources before scoring so one noisy agent can't drown the readout
+  let cappedGraded = graded;
+  if (graded.length > MAX_SOURCES) {
+    cappedGraded = [...graded].sort((a, b) => b.weight - a.weight).slice(0, MAX_SOURCES);
+    console.log(`capped ${graded.length} → ${MAX_SOURCES} claims (MAX_SOURCES)`);
+  }
+  // Use capped list for everything downstream (graph, tiers, readout) — keep original for audit if needed
   // Evidence graph — relationships between entities and observations, not just flat claims
-  void buildEvidenceGraph(inquiryId, graded).catch((err) => console.error("graph build failed:", err));
+  void buildEvidenceGraph(inquiryId, cappedGraded).catch((err) => console.error("graph build failed:", err));
+  const contradictions = detectContradictions(cappedGraded);
 
   // Reliability is an INTERNAL routing signal — how the orchestrator decides
   // whose results to read first when the grid is large. It is never a public
@@ -409,7 +423,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
     string,
     { discovery: number; confirmation: number; duplication: number }
   >();
-  for (const g of graded) {
+  for (const g of cappedGraded) {
     const entry = tierByAgent.get(g.agentId) ?? { discovery: 0, confirmation: 0, duplication: 0 };
     entry[g.tier] += 1;
     tierByAgent.set(g.agentId, entry);
@@ -426,7 +440,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
   }
 
   // Persist grades + canonical evidence records, each anchored to 0G Storage.
-  for (const g of graded) {
+  for (const g of cappedGraded) {
     await db
       .update(claims)
       .set({
@@ -484,8 +498,8 @@ export async function gradeAndSynthesize(inquiryId: string) {
   }
 
   // Synthesize the readout: group by company, weight-scaled confidence.
-  const byCompany = new Map<string, typeof graded>();
-  for (const g of graded) {
+  const byCompany = new Map<string, typeof cappedGraded>();
+  for (const g of cappedGraded) {
     if (!byCompany.has(g.company)) byCompany.set(g.company, []);
     byCompany.get(g.company)!.push(g);
   }
@@ -540,6 +554,7 @@ export async function gradeAndSynthesize(inquiryId: string) {
           .map((c) => c.whyRelevant?.trim())
           .filter(Boolean)
           .slice(0, 2) as string[],
+        scoreBreakdown: computeBreakdown(list, !!contact),
         contributingAgents: Array.from(new Set(list.map((c) => c.agentId))),
       };
     })
@@ -602,12 +617,12 @@ export async function gradeAndSynthesize(inquiryId: string) {
   if (payment && Number(payment.paidOg ?? 0) > 0) {
     poolUsd = splitPayment(Number(payment.paidOg)).poolUsd;
   }
-  const weightTotal = graded.reduce((s, g) => s + g.weight, 0);
+  const weightTotal = cappedGraded.reduce((s, g) => s + g.weight, 0);
   const settlementLines: { agentId: string; wallet: string; weight: number; amountUsd: number }[] =
     [];
   if (weightTotal > 0 && poolUsd > 0) {
     const insertedRowIds: number[] = [];
-    for (const g of graded) {
+    for (const g of cappedGraded) {
       const wallet = agentRows.find((a) => a.id === g.agentId)?.wallet;
       if (!wallet) continue;
       const amountUsd = Math.round(poolUsd * (g.weight / weightTotal) * 100) / 100;
@@ -688,8 +703,9 @@ export async function gradeAndSynthesize(inquiryId: string) {
     .update(inquiries)
     .set({
       status: "complete",
-      claimsReceived: graded.length,
+      claimsReceived: cappedGraded.length,
       sourcesClustered: totalClusters,
+      contradictions,
       gradeMode: llm.mode,
       gradeCostOg: llm.costOg ?? null,
       gradeError: llm.error ?? null,

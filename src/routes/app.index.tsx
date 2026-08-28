@@ -727,9 +727,7 @@ function Intelligence() {
                               </button>
                             </HoverCardTrigger>
                             <HoverCardContent className="w-96 p-3" align="start" sideOffset={8}>
-                              <p className="label-mono text-ink-muted">
-                                {entry.independentSources} sources — hover or click to open
-                              </p>
+                              <p className="label-mono text-ink-muted">Sources</p>
                               {(entry.sources?.length ?? 0) > 0 ? (
                                 <ul className="mt-2 max-h-[280px] space-y-1.5 overflow-auto pr-1">
                                   {(entry.sources ?? []).map((s, i) => (
@@ -754,14 +752,11 @@ function Intelligence() {
                                 </ul>
                               ) : (
                                 <p className="mt-2 text-xs leading-relaxed text-ink-muted">
-                                  Links for this run were not stored. Re-run and they will show here — each opens in a new tab so you can read the X / Medium / news post yourself and decide how to reach them.
+                                  Links for this run were not stored. Re-run and they will show here — each opens in a new tab.
                                 </p>
                               )}
                             </HoverCardContent>
                           </HoverCard>
-                          <span className="font-mono text-[0.6rem] text-ink-muted">
-                            hover or click
-                          </span>
                         </div>
                       </li>
                     ))}

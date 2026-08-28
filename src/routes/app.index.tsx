@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowUpRight, Bot, Database, Layers3, ScanLine } from "lucide-react";
+import { ArrowUpRight, Bot, Clock, Database, Layers3, ScanLine } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
@@ -148,9 +148,9 @@ function Intelligence() {
         window.clearInterval(pollRef.current!);
         setPhase("failed");
       }
-      // "complete" alone isn't enough — the synthesis pass writes the actual
-      // readout right after. Keep polling briefly until it lands (or ~40s cap).
-      if (state.status === "complete" && (state.synthesis || ticks > 20)) {
+      // Phase directly to results as soon as the readout exists — synthesis is
+      // an enhancement, not a gate. The UI renders readout immediately.
+      if (state.status === "complete" && (state.readout || state.synthesis)) {
         window.clearInterval(pollRef.current!);
         setPhase("done");
         if (identityRef.current) void refreshRunsRef.current?.();
@@ -191,7 +191,7 @@ function Intelligence() {
         const last = rows.find((r) => r.complete);
         if (last) {
           void getInquiry({ data: last.id }).then((state) => {
-            if (state?.synthesis && state.readout?.length) {
+            if (state?.readout?.length || state?.synthesis) {
               setInquiry(state);
               setPhase("done");
             }
@@ -212,11 +212,12 @@ function Intelligence() {
   async function run(event: React.FormEvent) {
     event.preventDefault();
     if (submitting || phase === "running") return;
+    const submittedQuery = query;
     setSubmitting(true);
     setPaywall(null);
     const result = await submitInquiry({
       data: {
-        question: query,
+        question: submittedQuery,
         ...(identity
           ? {
               identity,
@@ -228,8 +229,11 @@ function Intelligence() {
     });
     setSubmitting(false);
     if ("inquiryId" in result && result.inquiryId) {
+      setQuery("");
       setPhase("running");
       poll(result.inquiryId);
+      // Smooth scroll into results phase
+      requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
     } else if ("reason" in result && result.reason === "out_of_credits") {
       setPaywall({
         priceUsd: result.priceUsd,
@@ -284,9 +288,11 @@ function Intelligence() {
       if (result.ok) {
         setAccount(await getAccount({ data: { identity } }));
         setPaywall(null);
+        setQuery("");
         setPhase("running");
         refreshBalance();
         poll(result.inquiryId);
+        requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
       } else {
         setPayError(result.error);
       }
@@ -305,125 +311,158 @@ function Intelligence() {
   return (
     <div>
       <PrivyIdentity onChange={setPrivy} />
-      <section className="app-overview-hero">
-        <div className="app-overview-hero-inner">
-          <p className="app-overview-kicker label-mono">
-            <span className="app-sync-dot" aria-hidden />
-            Intelligence command · {agents.length} agents on the grid
-          </p>
-          <h1>What are you trying to find?</h1>
-          <p className="app-overview-hero-intro">
-            Tell us what you need to move. We put your question to a network of independent research
-            agents, separate the real signals from the noise, and come back with companies worth
-            your attention, plus the evidence behind every name.
-          </p>
+      {phase === "idle" ? (
+        <section className="app-overview-hero">
+          <div className="app-overview-hero-inner">
+            <p className="app-overview-kicker label-mono">
+              <span className="app-sync-dot" aria-hidden />
+              Intelligence command · {agents.length} agents on the grid
+            </p>
+            <h1>What are you trying to find?</h1>
+            <p className="app-overview-hero-intro">
+              Tell us what you need to move. We put your question to a network of independent
+              research agents, separate the real signals from the noise, and come back with
+              companies worth your attention, plus the evidence behind every name.
+            </p>
 
-          <RequireAuth>
-            <form onSubmit={run} className="app-query-box mt-9">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <label htmlFor="intent" className="label-mono text-ink-muted">
-                  Please put in your request
-                </label>
-                {account && (
-                  <span className="label-mono text-signal">
-                    {account.freeRunsLeft > 0
-                      ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
-                      : account.credits > 0
-                        ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
-                        : "no runs left"}
-                  </span>
+            <RequireAuth>
+              <form onSubmit={run} className="app-query-box mt-9">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <label htmlFor="intent" className="label-mono text-ink-muted">
+                    Please put in your request
+                  </label>
+                  {account && (
+                    <span className="label-mono text-signal">
+                      {account.freeRunsLeft > 0
+                        ? `${account.freeRunsLeft} free ${account.freeRunsLeft === 1 ? "run" : "runs"} left`
+                        : account.credits > 0
+                          ? `${account.credits} ${account.credits === 1 ? "credit" : "credits"} left`
+                          : "no runs left"}
+                    </span>
+                  )}
+                </div>
+                <textarea
+                  id="intent"
+                  rows={4}
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  readOnly={submitting}
+                  aria-readonly={submitting}
+                  placeholder="e.g. We have $13M of electricals to move in 6 months — who needs chandeliers, sockets, LEDs and solar right now?"
+                  className="mt-3 w-full"
+                />
+                <div className="app-query-meta">
+                  <p aria-live="polite">
+                    {submitting ? "Sending your request…" : "One request. Sourced, graded, cited."}
+                  </p>
+                  <button
+                    type="submit"
+                    className="app-signal-button shrink-0 inline-flex items-center gap-2"
+                    disabled={submitting || !query.trim()}
+                  >
+                    {submitting ? (
+                      <>
+                        <span
+                          className="inline-block size-3 animate-spin rounded-full border-2 border-ink/40 border-t-ink"
+                          aria-hidden
+                        />
+                        Sending…
+                      </>
+                    ) : (
+                      "Run intelligence"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </RequireAuth>
+
+            {paywall && (
+              <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
+                <p className="label-mono text-signal">Free runs used up</p>
+                <h3 className="mt-2 font-display text-2xl text-vellum">
+                  ${paywall.priceUsd} per intelligence run
+                </h3>
+                <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
+                  Pay from your wallet and the run starts immediately. The payment goes
+                  {paywall.paymentWallet ? " directly to Prime Layer" : ""} on 0G chain and is
+                  verified before your request dispatches.
+                </p>
+                {payError && (
+                  <p className="mt-4 border-l-2 border-flag pl-4 font-mono text-xs leading-relaxed text-flag">
+                    {payError}
+                  </p>
+                )}
+                {privy.firstWallet && paywall.paymentWallet ? (
+                  <button
+                    type="button"
+                    onClick={payAndRun}
+                    disabled={paying}
+                    className="app-signal-button mt-5 disabled:opacity-60"
+                  >
+                    {paying ? "Waiting for payment…" : `Pay $${paywall.priceUsd} & run`}
+                    {!paying && <ArrowUpRight className="size-3.5" aria-hidden />}
+                  </button>
+                ) : (
+                  <p className="mt-4 font-mono text-xs text-flag">
+                    Sign in with a wallet-enabled account to pay for runs.
+                  </p>
                 )}
               </div>
-              <textarea
-                id="intent"
-                rows={4}
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-                readOnly={phase === "running" || submitting}
-                aria-readonly={phase === "running" || submitting}
-                className="mt-3 w-full"
-              />
-              <div className="app-query-meta">
-                <p aria-live="polite">
-                  {submitting
-                    ? "Sending your request…"
-                    : phase === "running"
-                      ? inquiry?.status === "grading"
-                        ? "Checking the evidence…"
-                        : inquiry?.status === "dispatching"
-                          ? "Contacting our agents…"
-                          : "Researching your request…"
-                      : "One request. Sourced, graded, cited."}
-                </p>
-                <button
-                  type="submit"
-                  className="app-signal-button shrink-0 inline-flex items-center gap-2"
-                  disabled={submitting || phase === "running"}
-                >
-                  {submitting || phase === "running" ? (
-                    <>
-                      <span
-                        className="inline-block size-3 animate-spin rounded-full border-2 border-ink/40 border-t-ink"
-                        aria-hidden
-                      />
-                      Running…
-                    </>
-                  ) : (
-                    "Run intelligence"
-                  )}
-                </button>
-              </div>
-            </form>
-          </RequireAuth>
+            )}
 
-          {paywall && (
-            <div className="surface-dark mt-5 p-5 sm:p-6" aria-label="Payment needed">
-              <p className="label-mono text-signal">Free runs used up</p>
-              <h3 className="mt-2 font-display text-2xl text-vellum">
-                ${paywall.priceUsd} per intelligence run
-              </h3>
-              <p className="mt-3 max-w-2xl text-sm leading-relaxed text-ink-muted">
-                Pay from your wallet and the run starts immediately. The payment goes
-                {paywall.paymentWallet ? " directly to Prime Layer" : ""} on 0G chain and is
-                verified before your request dispatches.
-              </p>
-              {payError && (
-                <p className="mt-4 border-l-2 border-flag pl-4 font-mono text-xs leading-relaxed text-flag">
-                  {payError}
-                </p>
-              )}
-              {privy.firstWallet && paywall.paymentWallet ? (
+            <div className="mt-3 flex flex-wrap gap-2">
+              {EXAMPLES.filter((ex) => ex !== query).map((example) => (
                 <button
+                  key={example}
                   type="button"
-                  onClick={payAndRun}
-                  disabled={paying}
-                  className="app-signal-button mt-5 disabled:opacity-60"
+                  onClick={() => setQuery(example)}
+                  className="app-filter-button text-left normal-case tracking-normal"
                 >
-                  {paying ? "Waiting for payment…" : `Pay $${paywall.priceUsd} & run`}
-                  {!paying && <ArrowUpRight className="size-3.5" aria-hidden />}
+                  {example.length > 90 ? `${example.slice(0, 88)}…` : example}
                 </button>
-              ) : (
-                <p className="mt-4 font-mono text-xs text-flag">
-                  Sign in with a wallet-enabled account to pay for runs.
-                </p>
-              )}
+              ))}
             </div>
-          )}
-
-          <div className="mt-3 flex flex-wrap gap-2">
-            {EXAMPLES.map((example) => (
-              <button
-                key={example}
-                type="button"
-                onClick={() => setQuery(example)}
-                className="app-filter-button text-left normal-case tracking-normal"
-              >
-                {example}
-              </button>
-            ))}
           </div>
-        </div>
-      </section>
+        </section>
+      ) : (
+        <section className="border-b border-border bg-[#0a0f0e]/95 backdrop-blur">
+          <div className="mx-auto max-w-[1280px] px-6 py-4 sm:px-8 sm:py-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="label-mono flex items-center gap-2 text-signal">
+                <span className="app-sync-dot" aria-hidden />
+                {phase === "running"
+                  ? inquiry?.status === "grading"
+                    ? "Checking the evidence…"
+                    : inquiry?.status === "dispatching"
+                      ? "Contacting our agents…"
+                      : "Researching your request…"
+                  : phase === "done"
+                    ? "Readout ready — 8 companies"
+                    : "Run failed"}
+                <span className="hidden text-ink-muted sm:inline">
+                  · {agents.length} agents on the grid
+                </span>
+              </p>
+              <button
+                type="button"
+                onClick={() => {
+                  if (pollRef.current) window.clearInterval(pollRef.current);
+                  setPhase("idle");
+                  setInquiry(null);
+                }}
+                className="rounded-sm border border-ink-border px-3.5 py-1.5 text-xs font-medium hover:border-signal hover:text-signal"
+              >
+                New request
+              </button>
+            </div>
+            {inquiry?.question && (
+              <p className="mt-3 max-w-3xl truncate font-mono text-xs leading-relaxed text-ink-muted">
+                “{inquiry.question}”
+              </p>
+            )}
+          </div>
+        </section>
+      )}
 
       {phase === "idle" && (
         <div className="app-content">
@@ -522,6 +561,72 @@ function Intelligence() {
                   );
                 })}
               </ol>
+              {identity && history.length > 0 && (
+                <div className="mt-7 border-t border-ink-border pt-4">
+                  <button
+                    type="button"
+                    onClick={() => setShowRecent((v) => !v)}
+                    className="flex w-full items-center justify-between rounded-sm border border-ink-border px-3.5 py-2 text-xs font-medium text-vellum transition-colors hover:border-signal hover:text-signal"
+                  >
+                    <span className="inline-flex items-center gap-2">
+                      <Clock className="size-3.5" aria-hidden />
+                      Recent enquiries
+                      <span className="rounded-sm bg-ink-border px-1.5 py-0.5 font-mono text-[0.6rem] text-vellum">
+                        {history.filter((r) => r.complete).length}
+                      </span>
+                    </span>
+                    <span className="label-mono text-[0.65rem]">
+                      {showRecent ? "Hide" : "View"}
+                    </span>
+                  </button>
+                  {showRecent && (
+                    <ul className="mt-3 max-h-72 overflow-auto divide-y divide-ink-border rounded-sm border border-ink-border">
+                      {history.slice(0, 10).map((row) => (
+                        <li key={row.id}>
+                          <button
+                            type="button"
+                            disabled={!row.complete || row.id === inquiry?.id}
+                            onClick={() => {
+                              void getInquiry({ data: row.id }).then((state) => {
+                                if (state?.readout?.length || state?.synthesis) {
+                                  setInquiry(state);
+                                  setPhase("done");
+                                  setShowRecent(false);
+                                  window.scrollTo({ top: 0, behavior: "smooth" });
+                                }
+                              });
+                            }}
+                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors enabled:hover:bg-ink/40 disabled:opacity-50"
+                          >
+                            <span className="min-w-0 flex-1 truncate text-xs leading-snug text-vellum">
+                              {row.question}
+                            </span>
+                            <span
+                              className={`label-mono shrink-0 text-[0.6rem] ${
+                                row.active
+                                  ? "text-signal"
+                                  : row.complete
+                                    ? row.id === inquiry?.id
+                                      ? "text-ink-muted"
+                                      : "text-verified"
+                                    : "text-flag"
+                              }`}
+                            >
+                              {row.active
+                                ? "in progress"
+                                : row.id === inquiry?.id
+                                  ? "showing"
+                                  : row.complete
+                                    ? "view"
+                                    : "failed"}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              )}
               <p className="mt-7 border-t border-ink-border pt-4 font-mono text-[0.66rem] leading-relaxed text-ink-muted">
                 One readout. Every claim carries its source.
               </p>
@@ -533,69 +638,13 @@ function Intelligence() {
                   <h2 className="mt-2 font-display text-2xl">What came back</h2>
                 </div>
                 <div className="flex items-center gap-3">
-                  {identity && history.some((r) => r.complete) && (
-                    <button
-                      type="button"
-                      onClick={() => setShowRecent((v) => !v)}
-                      className="rounded-sm border border-ink-border px-3.5 py-1.5 text-xs font-medium text-vellum transition-colors hover:border-signal hover:text-signal"
-                    >
-                      {showRecent ? "Hide recent" : "Recent"}
-                    </button>
-                  )}
                   {phase === "done" && <StatusPill tone="verified" label="Evidence attached" />}
                   {phase === "failed" && <StatusPill tone="flagged" label="Run failed" />}
                 </div>
               </div>
 
-              {showRecent && (
-                <ul className="mt-4 divide-y divide-border rounded-sm border border-border">
-                  {history.map((row) => (
-                    <li key={row.id}>
-                      <button
-                        type="button"
-                        disabled={!row.complete || row.id === inquiry?.id}
-                        onClick={() => {
-                          void getInquiry({ data: row.id }).then((state) => {
-                            if (state?.readout?.length || state?.synthesis) {
-                              setInquiry(state);
-                              setPhase("done");
-                              setShowRecent(false);
-                              window.scrollTo({ top: 0, behavior: "smooth" });
-                            }
-                          });
-                        }}
-                        className="flex w-full items-center justify-between gap-4 px-4 py-3 text-left transition-colors enabled:hover:bg-slate/60 disabled:opacity-50"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-sm text-vellum">
-                          {row.question}
-                        </span>
-                        <span
-                          className={`label-mono shrink-0 ${
-                            row.active
-                              ? "text-signal"
-                              : row.complete
-                                ? row.id === inquiry?.id
-                                  ? "text-ink-muted"
-                                  : "text-verified"
-                                : "text-flag"
-                          }`}
-                        >
-                          {row.active
-                            ? "in progress"
-                            : row.id === inquiry?.id
-                              ? "showing now"
-                              : row.complete
-                                ? "view"
-                                : "didn't finish"}
-                        </span>
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-
               {phase === "done" && synthesis && synthesis.recommendations.length > 0 ? (
-                <div className="mt-5 space-y-5">
+                <div className="mt-5 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
                   {synthesis.preamble && (
                     <p className="max-w-3xl border-l-2 border-signal pl-4 text-sm leading-relaxed text-muted-foreground">
                       {synthesis.preamble}
@@ -649,7 +698,7 @@ function Intelligence() {
                   </ol>
                 </div>
               ) : phase === "done" && synthesis ? (
-                <div className="surface mt-5 p-8 text-center">
+                <div className="surface mt-5 p-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <p className="font-display text-xl">
                     Honestly — nothing worth recommending came back.
                   </p>
@@ -659,15 +708,55 @@ function Intelligence() {
                   </p>
                 </div>
               ) : phase === "done" && readout.length > 0 ? (
-                <div className="surface mt-5 p-8 text-center">
-                  <p className="font-display text-xl">Signals are in — writing your readout…</p>
-                  <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
-                    {readout.length} companies came back from the grid. The orchestrator is merging
-                    duplicates and drafting the recommendation now. This page updates in a moment.
+                <div className="mt-5 space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <p className="max-w-3xl border-l-2 border-signal pl-4 text-sm leading-relaxed text-muted-foreground">
+                    {synthesis?.preamble ||
+                      `We clustered ${readout.length} companies from ${inquiry?.sourcesClustered ?? readout.reduce((s, r) => s + r.independentSources, 0)} source clusters. Ranked by confidence — highest first.`}
                   </p>
+                  <ol className="space-y-4">
+                    {readout.map((entry, index) => (
+                      <li key={`${entry.company}-${index}`} className="surface p-5 sm:p-6">
+                        <div className="flex flex-wrap items-start justify-between gap-4">
+                          <div className="min-w-0">
+                            <p className="label-mono text-signal">
+                              {String(index + 1).padStart(2, "0")} · Company
+                            </p>
+                            <h3 className="mt-2 font-display text-2xl leading-tight">
+                              {entry.company}
+                            </h3>
+                            <p className="mt-1 text-sm font-medium leading-snug text-muted-foreground">
+                              {entry.topClaim}
+                            </p>
+                          </div>
+                          <div className="text-right">
+                            <p className="font-mono text-3xl text-signal">{entry.confidence}%</p>
+                            <p className="label-mono text-muted-foreground">confidence</p>
+                          </div>
+                        </div>
+                        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
+                          <span className="label-mono text-muted-foreground">
+                            {entry.claims} claim{entry.claims === 1 ? "" : "s"} ·{" "}
+                            {entry.independentSources} source
+                            {entry.independentSources === 1 ? "" : "s"}
+                          </span>
+                          <span className="size-1 rounded-full bg-border" aria-hidden />
+                          <span className="label-mono text-muted-foreground">
+                            {entry.contributingAgents.length} agent
+                            {entry.contributingAgents.length === 1 ? "" : "s"}
+                          </span>
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                  {synthesis && synthesis.recommendations.length === 0 && (
+                    <p className="text-center font-mono text-xs text-muted-foreground">
+                      Full recommendation text will upgrade in a moment — these are the raw ranked
+                      signals.
+                    </p>
+                  )}
                 </div>
               ) : phase === "done" ? (
-                <div className="surface mt-5 p-8 text-center">
+                <div className="surface mt-5 p-8 text-center animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <p className="font-display text-xl">Nothing came back this time.</p>
                   <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-muted-foreground">
                     We asked everyone on the grid and, honestly, no one had anything solid for you.
@@ -676,12 +765,20 @@ function Intelligence() {
                     it'll show up here.
                   </p>
                 </div>
+              ) : phase === "failed" ? (
+                <div className="surface mt-5 p-8 text-center animate-in fade-in duration-300">
+                  <p className="font-display text-xl">Run failed</p>
+                  <p className="mx-auto mt-3 max-w-md font-mono text-xs leading-relaxed text-muted-foreground">
+                    {inquiry?.error ?? "Something went wrong on our end."}
+                  </p>
+                </div>
               ) : (
-                <div className="surface mt-5 flex min-h-72 items-center justify-center p-8 text-center">
-                  <p className="max-w-sm font-mono text-xs leading-relaxed text-muted-foreground">
-                    {phase === "failed"
-                      ? (inquiry?.error ?? "Something went wrong on our end.")
-                      : "We're on it. Agents are out checking their sources right now. This can take up to five minutes, and we'll bring everything back the moment it's ready."}
+                <div className="mt-5 space-y-3">
+                  <div className="h-24 rounded-sm border border-border bg-slate/30 animate-pulse" />
+                  <div className="h-24 rounded-sm border border-border bg-slate/20 animate-pulse [animation-delay:150ms]" />
+                  <div className="h-24 rounded-sm border border-border bg-slate/10 animate-pulse [animation-delay:300ms]" />
+                  <p className="pt-2 text-center font-mono text-[0.65rem] text-ink-muted">
+                    Researching — results slide in as soon as the 8 are ranked
                   </p>
                 </div>
               )}

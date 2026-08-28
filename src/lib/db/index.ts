@@ -118,6 +118,25 @@ const DDL = [
     inquiry_id TEXT,
     created_at TEXT NOT NULL
   )`,
+  `CREATE TABLE IF NOT EXISTS graph_nodes (
+    id TEXT PRIMARY KEY,
+    inquiry_id TEXT NOT NULL,
+    type TEXT NOT NULL,
+    label TEXT NOT NULL,
+    source TEXT,
+    created_at TEXT NOT NULL
+  )`,
+  `CREATE TABLE IF NOT EXISTS graph_edges (
+    id TEXT PRIMARY KEY,
+    inquiry_id TEXT NOT NULL,
+    from_id TEXT NOT NULL,
+    to_id TEXT NOT NULL,
+    relation TEXT NOT NULL,
+    claim TEXT,
+    confidence REAL,
+    source TEXT,
+    created_at TEXT NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS accounts (
     id TEXT PRIMARY KEY,
     identity TEXT NOT NULL UNIQUE,

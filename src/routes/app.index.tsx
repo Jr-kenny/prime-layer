@@ -674,6 +674,14 @@ function Intelligence() {
                             <p className="mt-3 max-w-3xl text-sm leading-relaxed">
                               {entry.topClaim}
                             </p>
+                            {(entry as unknown as { facts?: string[] }).facts?.[0] ? (
+                              <p className="mt-2 max-w-3xl text-xs leading-relaxed text-muted-foreground">
+                                Found: {(entry as unknown as { facts?: string[] }).facts![0]}
+                                {(entry as unknown as { facts?: string[] }).facts![1]
+                                  ? ` · ${(entry as unknown as { facts?: string[] }).facts![1]!.slice(0, 80)}`
+                                  : ""}
+                              </p>
+                            ) : null}
                             {entry.contact ? (
                               <p className="mt-2 font-mono text-xs">
                                 <a

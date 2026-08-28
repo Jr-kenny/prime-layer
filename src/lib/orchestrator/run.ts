@@ -27,6 +27,7 @@ import { anchorRecord } from "@/lib/0g/evidence-anchor";
 import { grantFailureCredit } from "./credits";
 import { generateHypotheses } from "./hypothesis";
 import { buildInitialInvestigation } from "./investigation";
+import { buildEvidenceGraph } from "./evidence-graph";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
@@ -396,6 +397,9 @@ export async function gradeAndSynthesize(inquiryId: string) {
       : [],
   );
 
+  // Evidence graph — relationships between entities and observations, not just flat claims
+  void buildEvidenceGraph(inquiryId, graded).catch((err) => console.error("graph build failed:", err));
+
   // Reliability is an INTERNAL routing signal — how the orchestrator decides
   // whose results to read first when the grid is large. It is never a public
   // score and never a trust gate: every agent is equal on the grid, and
@@ -531,6 +535,11 @@ export async function gradeAndSynthesize(inquiryId: string) {
         topClaim: top.whyRelevant?.trim() || top.claim,
         sources: Array.from(sourceMap.values()).slice(0, 6),
         contact,
+        facts: sorted[0]!.evidence.map((e) => e.item).slice(0, 2),
+        inferences: sorted
+          .map((c) => c.whyRelevant?.trim())
+          .filter(Boolean)
+          .slice(0, 2) as string[],
         contributingAgents: Array.from(new Set(list.map((c) => c.agentId))),
       };
     })

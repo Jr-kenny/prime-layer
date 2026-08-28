@@ -20,6 +20,8 @@ export type ReadoutEntry = {
   topClaim: string;
   sources: { label: string; url: string }[];
   contact?: string | null;
+  facts?: string[];
+  inferences?: string[];
   contributingAgents: string[];
 };
 
@@ -35,6 +37,8 @@ const readoutSchema = z.array(
       .optional()
       .default([]),
     contact: z.string().max(280).optional().nullable(),
+    facts: z.array(z.string()).optional().default([]),
+    inferences: z.array(z.string()).optional().default([]),
     contributingAgents: z.array(z.string()),
   }),
 );

@@ -102,6 +102,27 @@ export const evidenceRecords = sqliteTable("evidence_records", {
   createdAt: text("created_at").notNull(),
 });
 
+export const graphNodes = sqliteTable("graph_nodes", {
+  id: text("id").primaryKey(),
+  inquiryId: text("inquiry_id").notNull(),
+  type: text("type").notNull(),
+  label: text("label").notNull(),
+  source: text("source"),
+  createdAt: text("created_at").notNull(),
+});
+
+export const graphEdges = sqliteTable("graph_edges", {
+  id: text("id").primaryKey(),
+  inquiryId: text("inquiry_id").notNull(),
+  fromId: text("from_id").notNull(),
+  toId: text("to_id").notNull(),
+  relation: text("relation").notNull(),
+  claim: text("claim"),
+  confidence: real("confidence"),
+  source: text("source"),
+  createdAt: text("created_at").notNull(),
+});
+
 export const dispatchAcks = sqliteTable("dispatch_acks", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   inquiryId: text("inquiry_id").notNull(),

@@ -17,7 +17,7 @@ env = {
     'ZERO_G_COMPUTE_API_KEY': get('ZERO_G_COMPUTE_API_KEY'),
     'ZERO_G_COMPUTE_BASE_URL': 'https://router-api.0g.ai/v1',
     'AGENTIC_ID_CONTRACT': get('AGENTIC_ID_CONTRACT'),
-    'PRIME_ORCHESTRATOR': 'https://primelayerlive.vercel.app',
+    'PRIME_ORCHESTRATOR': 'https://primelayernowlive.vercel.app',
     'CONNECTOR_PORT': '8790',
 }
 lines = [f"{k}={v}" for k, v in env.items() if v]

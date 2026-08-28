@@ -96,6 +96,8 @@ type ResearchCommand = {
   inquiry_id: string;
   question: string;
   scope: { category?: string; geography?: string };
+  hypotheses?: { label: string; searchHints: string[]; signals: string[] }[];
+  investigation?: unknown;
   window_seconds: number;
   submit_url: string;
 };
@@ -103,6 +105,15 @@ type ResearchCommand = {
 // ─── Query building ─────────────────────────────────────────────────────────
 
 function buildQueries(cmd: ResearchCommand): string[] {
+  // Hypotheses-aware: use the orchestrator's search hints first — they already encode
+  // inventory→demand reasoning (hotel construction, street-lighting etc.), not just keywords.
+  if (cmd.hypotheses?.length) {
+    const hints = cmd.hypotheses.flatMap((h) => h.searchHints ?? []).filter(Boolean).slice(0, 6);
+    if (hints.length >= 2) {
+      const geo = cmd.scope.geography ? ` ${cmd.scope.geography}` : "";
+      return hints.map((q) => `${q}${geo}`.trim());
+    }
+  }
   const geo = cmd.scope.geography ?? "";
   const words = cmd.question
     .toLowerCase()

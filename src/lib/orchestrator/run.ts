@@ -25,6 +25,8 @@ import { settleCycle } from "@/lib/0g/payouts";
 import { synthesizeInquiry } from "./synthesize";
 import { anchorRecord } from "@/lib/0g/evidence-anchor";
 import { grantFailureCredit } from "./credits";
+import { generateHypotheses } from "./hypothesis";
+import { buildInitialInvestigation } from "./investigation";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
@@ -42,6 +44,8 @@ export type ResearchCommand = {
   inquiry_id: string;
   question: string;
   scope: { category?: string; geography?: string };
+  hypotheses?: import("./hypothesis").DemandHypothesis[];
+  investigation?: import("./investigation").InvestigationState;
   window_seconds: number;
   submit_url: string;
 };
@@ -123,11 +127,19 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
     // claims — set the window, fire commands, and return. The UI poll will
     // trigger grading once the window closes (or early if all agents respond).
     const scope = extractScope(inquiry.question);
+    // Hypotheses: what demand could exist for this inventory — not just keyword replay
+    let hypotheses: import("./hypothesis").DemandHypothesis[] = [];
+    let investigation: import("./investigation").InvestigationState | null = null;
+    try {
+      hypotheses = await generateHypotheses(inquiry.question);
+      investigation = buildInitialInvestigation(inquiry.question, hypotheses);
+    } catch {}
     await db
       .update(inquiries)
       .set({
         category: scope.category ?? null,
         geography: scope.geography ?? null,
+        investigationJson: investigation ? JSON.stringify(investigation) : null,
         status: "dispatching",
         updatedAt: nowIso(),
       })
@@ -170,14 +182,16 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
       })
       .where(eq(inquiries.id, inquiryId));
 
-    const command: ResearchCommand = {
+    const command = {
       command_id: newId("CMD"),
       inquiry_id: inquiryId,
       question: inquiry.question,
       scope,
+      hypotheses: hypotheses.length ? hypotheses : undefined,
+      investigation: investigation ?? undefined,
       window_seconds: SOURCING_WINDOW_SECONDS,
       submit_url: submitUrl,
-    };
+    } as ResearchCommand;
 
     const results = await Promise.allSettled(
       dispatched.map((agent) => dispatchToAgent(agent.endpoint, command)),

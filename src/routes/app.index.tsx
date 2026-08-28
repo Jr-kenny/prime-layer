@@ -622,10 +622,7 @@ function Intelligence() {
                         <p className="mt-4 max-w-3xl text-sm leading-relaxed">{rec.body}</p>
                         {rec.sources.length > 0 && (
                           <div className="mt-5 border-t border-border pt-4">
-                            <p className="label-mono text-muted-foreground">
-                              Sources — {rec.sources.length} links
-                            </p>
-                            <ul className="mt-2 flex flex-wrap gap-2">
+                            <ul className="flex flex-wrap gap-2">
                               {rec.sources.map((source, sIndex) => (
                                 <li key={`${source.url}-${sIndex}`}>
                                   <a
@@ -689,11 +686,8 @@ function Intelligence() {
                           </div>
                         </div>
                         <div className="mt-5 border-t border-border pt-4">
-                          <p className="label-mono text-muted-foreground">
-                            Sources — {entry.independentSources} independent
-                          </p>
                           {(entry.sources?.length ?? 0) > 0 ? (
-                            <ul className="mt-2 flex flex-wrap gap-2">
+                            <ul className="flex flex-wrap gap-2">
                               {(entry.sources ?? []).map((source, sIndex) => (
                                 <li key={`${source.url}-${sIndex}`}>
                                   <a
@@ -710,7 +704,7 @@ function Intelligence() {
                               ))}
                             </ul>
                           ) : (
-                            <p className="mt-2 font-mono text-xs text-ink-muted">
+                            <p className="font-mono text-xs text-ink-muted">
                               {entry.independentSources} sources clustered — links will appear here on your next run (this one was graded before link storage).
                             </p>
                           )}

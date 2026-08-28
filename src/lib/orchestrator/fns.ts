@@ -18,6 +18,7 @@ export type ReadoutEntry = {
   claims: number;
   independentSources: number;
   topClaim: string;
+  sources: { label: string; url: string }[];
   contributingAgents: string[];
 };
 
@@ -28,6 +29,10 @@ const readoutSchema = z.array(
     claims: z.number(),
     independentSources: z.number(),
     topClaim: z.string(),
+    sources: z
+      .array(z.object({ label: z.string(), url: z.string() }))
+      .optional()
+      .default([]),
     contributingAgents: z.array(z.string()),
   }),
 );

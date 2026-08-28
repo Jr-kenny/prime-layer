@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { ArrowUpRight, Bot, Clock, Database, Layers3, ScanLine } from "lucide-react";
+import { ArrowUpRight, Bot, Database, Layers3, ScanLine } from "lucide-react";
+import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SectionHeading, StatusPill } from "@/components/app/AppUI";
 import { RequireAuth } from "@/components/app/auth-gate";
@@ -50,6 +51,7 @@ type ReadoutEntry = {
   claims: number;
   independentSources: number;
   topClaim: string;
+  sources: { label: string; url: string }[];
   contributingAgents: string[];
 };
 
@@ -86,7 +88,6 @@ function Intelligence() {
   const [payError, setPayError] = useState<string | null>(null);
   const [walletOg, setWalletOg] = useState<number | null>(null);
   const [history, setHistory] = useState<RunHistoryRow[]>([]);
-  const [showRecent, setShowRecent] = useState(false);
   const pollRef = useRef<number | null>(null);
   const [privy, setPrivy] = useState<PrivyIdentityInfo>({
     authenticated: false,
@@ -207,6 +208,20 @@ function Intelligence() {
   useEffect(() => {
     refreshRuns();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identity]);
+
+  // Deep-link from Supply's Recent enquiries: /app?inquiry=INQ_xxx
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get("inquiry");
+    if (q && identity) {
+      void getInquiry({ data: q }).then((state) => {
+        if (state?.readout?.length || state?.synthesis) {
+          setInquiry(state);
+          setPhase("done");
+          window.history.replaceState({}, "", "/app");
+        }
+      });
+    }
   }, [identity]);
 
   async function run(event: React.FormEvent) {
@@ -561,72 +576,6 @@ function Intelligence() {
                   );
                 })}
               </ol>
-              {identity && history.length > 0 && (
-                <div className="mt-7 border-t border-ink-border pt-4">
-                  <button
-                    type="button"
-                    onClick={() => setShowRecent((v) => !v)}
-                    className="flex w-full items-center justify-between rounded-sm border border-ink-border px-3.5 py-2 text-xs font-medium text-vellum transition-colors hover:border-signal hover:text-signal"
-                  >
-                    <span className="inline-flex items-center gap-2">
-                      <Clock className="size-3.5" aria-hidden />
-                      Recent enquiries
-                      <span className="rounded-sm bg-ink-border px-1.5 py-0.5 font-mono text-[0.6rem] text-vellum">
-                        {history.filter((r) => r.complete).length}
-                      </span>
-                    </span>
-                    <span className="label-mono text-[0.65rem]">
-                      {showRecent ? "Hide" : "View"}
-                    </span>
-                  </button>
-                  {showRecent && (
-                    <ul className="mt-3 max-h-72 overflow-auto divide-y divide-ink-border rounded-sm border border-ink-border">
-                      {history.slice(0, 10).map((row) => (
-                        <li key={row.id}>
-                          <button
-                            type="button"
-                            disabled={!row.complete || row.id === inquiry?.id}
-                            onClick={() => {
-                              void getInquiry({ data: row.id }).then((state) => {
-                                if (state?.readout?.length || state?.synthesis) {
-                                  setInquiry(state);
-                                  setPhase("done");
-                                  setShowRecent(false);
-                                  window.scrollTo({ top: 0, behavior: "smooth" });
-                                }
-                              });
-                            }}
-                            className="flex w-full items-center justify-between gap-3 px-3 py-2.5 text-left transition-colors enabled:hover:bg-ink/40 disabled:opacity-50"
-                          >
-                            <span className="min-w-0 flex-1 truncate text-xs leading-snug text-vellum">
-                              {row.question}
-                            </span>
-                            <span
-                              className={`label-mono shrink-0 text-[0.6rem] ${
-                                row.active
-                                  ? "text-signal"
-                                  : row.complete
-                                    ? row.id === inquiry?.id
-                                      ? "text-ink-muted"
-                                      : "text-verified"
-                                    : "text-flag"
-                              }`}
-                            >
-                              {row.active
-                                ? "in progress"
-                                : row.id === inquiry?.id
-                                  ? "showing"
-                                  : row.complete
-                                    ? "view"
-                                    : "failed"}
-                            </span>
-                          </button>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
               <p className="mt-7 border-t border-ink-border pt-4 font-mono text-[0.66rem] leading-relaxed text-ink-muted">
                 One readout. Every claim carries its source.
               </p>
@@ -717,33 +666,93 @@ function Intelligence() {
                     {readout.map((entry, index) => (
                       <li key={`${entry.company}-${index}`} className="surface p-5 sm:p-6">
                         <div className="flex flex-wrap items-start justify-between gap-4">
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <p className="label-mono text-signal">
-                              {String(index + 1).padStart(2, "0")} · Company
+                              {String(index + 1).padStart(2, "0")} · Recommendation
                             </p>
                             <h3 className="mt-2 font-display text-2xl leading-tight">
                               {entry.company}
                             </h3>
-                            <p className="mt-1 text-sm font-medium leading-snug text-muted-foreground">
+                            <p className="mt-3 max-w-3xl text-sm leading-relaxed">
                               {entry.topClaim}
                             </p>
+                            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-muted-foreground">
+                              This signal suggests a near-term need that matches what you are trying
+                              to move — worth checking the sources below yourself before you commit
+                              stock.
+                            </p>
                           </div>
-                          <div className="text-right">
+                          <div className="text-right shrink-0">
                             <p className="font-mono text-3xl text-signal">{entry.confidence}%</p>
-                            <p className="label-mono text-muted-foreground">confidence</p>
+                            <p className="label-mono text-muted-foreground">match</p>
                           </div>
                         </div>
-                        <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border pt-4">
-                          <span className="label-mono text-muted-foreground">
-                            {entry.claims} claim{entry.claims === 1 ? "" : "s"} ·{" "}
-                            {entry.independentSources} source
-                            {entry.independentSources === 1 ? "" : "s"}
-                          </span>
-                          <span className="size-1 rounded-full bg-border" aria-hidden />
-                          <span className="label-mono text-muted-foreground">
-                            {entry.contributingAgents.length} agent
-                            {entry.contributingAgents.length === 1 ? "" : "s"}
-                          </span>
+                        {(entry.sources?.length ?? 0) > 0 && (
+                          <div className="mt-5 border-t border-border pt-4">
+                            <p className="label-mono text-muted-foreground">
+                              Sources · read them yourself
+                            </p>
+                            <ul className="mt-2 flex flex-wrap gap-x-5 gap-y-2">
+                              {(entry.sources ?? []).map((source, sIndex) => (
+                                <li key={`${source.url}-${sIndex}`}>
+                                  <a
+                                    href={source.url}
+                                    target="_blank"
+                                    rel="noreferrer"
+                                    className="inline-flex items-center gap-1.5 font-mono text-xs text-signal hover:text-ink"
+                                  >
+                                    {source.label || "source"}
+                                    <ArrowUpRight className="size-3" aria-hidden />
+                                  </a>
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                        <div className="mt-4 flex items-center gap-2 border-t border-border pt-3">
+                          {(entry.sources?.length ?? 0) > 0 ? (
+                            <HoverCard>
+                              <HoverCardTrigger asChild>
+                                <button className="label-mono text-muted-foreground underline decoration-dotted underline-offset-4 hover:text-signal hover:decoration-signal">
+                                  {entry.independentSources} independent source
+                                  {entry.independentSources === 1 ? "" : "s"}
+                                  {entry.claims > entry.independentSources
+                                    ? ` · ${entry.claims} signals clustered`
+                                    : ""}
+                                  <span className="ml-1 text-[0.6rem]">↗</span>
+                                </button>
+                              </HoverCardTrigger>
+                              <HoverCardContent className="w-80 p-3" align="start">
+                                <p className="label-mono text-ink-muted">Sources · click to read</p>
+                                <ul className="mt-2 space-y-1.5">
+                                  {(entry.sources ?? []).slice(0, 5).map((s, i) => (
+                                    <li key={`${s.url}-${i}`}>
+                                      <a
+                                        href={s.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="flex items-center justify-between gap-2 rounded-sm border border-border px-2 py-1.5 text-xs hover:border-signal hover:bg-slate/30"
+                                      >
+                                        <span className="truncate font-mono text-signal">
+                                          {s.label}
+                                        </span>
+                                        <ArrowUpRight className="size-3 shrink-0 text-muted-foreground" />
+                                      </a>
+                                    </li>
+                                  ))}
+                                </ul>
+                                <p className="mt-2 font-mono text-[0.6rem] text-ink-muted">
+                                  Hover shows {Math.min(5, entry.sources?.length ?? 0)} of{" "}
+                                  {entry.sources?.length ?? 0} — full list below.
+                                </p>
+                              </HoverCardContent>
+                            </HoverCard>
+                          ) : (
+                            <span className="label-mono text-muted-foreground">
+                              {entry.independentSources} independent source
+                              {entry.independentSources === 1 ? "" : "s"}
+                            </span>
+                          )}
                         </div>
                       </li>
                     ))}

@@ -477,12 +477,37 @@ export async function gradeAndSynthesize(inquiryId: string) {
       const clusters = new Set(
         list.flatMap((c) => c.evidence.map((e) => sourceClusterKey(e.source))),
       );
+      const sorted = [...list].sort((a, b) => b.weight - a.weight);
+      const top = sorted[0]!;
+      const sourceMap = new Map<string, { label: string; url: string }>();
+      for (const c of list) {
+        for (const ev of c.evidence) {
+          if (!ev.source) continue;
+          const isUrl = /^https?:\/\//.test(ev.source);
+          let label = "source";
+          let url = ev.source;
+          if (isUrl) {
+            try {
+              label = new URL(ev.source).hostname.replace(/^www\./, "");
+            } catch {
+              label = ev.source.slice(0, 40);
+            }
+            url = ev.source;
+          } else {
+            label = ev.source.slice(0, 60);
+            url = ev.source;
+          }
+          const key = isUrl ? ev.source : ev.item || ev.source;
+          if (!sourceMap.has(key)) sourceMap.set(key, { label, url });
+        }
+      }
       return {
         company,
         confidence,
         claims: list.length,
         independentSources: clusters.size,
-        topClaim: list.sort((a, b) => b.weight - a.weight)[0]!.claim,
+        topClaim: top.claim,
+        sources: Array.from(sourceMap.values()).slice(0, 6),
         contributingAgents: Array.from(new Set(list.map((c) => c.agentId))),
       };
     })

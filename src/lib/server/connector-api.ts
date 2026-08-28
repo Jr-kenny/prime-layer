@@ -46,7 +46,10 @@ const submitSchema = z.object({
         company: z.string().min(1).max(120),
         claim: z.string().min(10).max(500),
         confidence: z.number().min(0).max(1),
-        why_relevant: z.string().max(280).optional(),
+        // Human-voice why_relevant can run longer than 280; we slice to 280
+        // on DB write below so the UI stays tight. The wire format needs a
+        // ceiling so a runaway agent can't blow up the request body.
+        why_relevant: z.string().max(1000).optional(),
         contact: z.string().max(280).optional(),
         evidence: z
           .array(

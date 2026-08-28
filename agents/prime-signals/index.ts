@@ -90,7 +90,7 @@ const GENERIC_SINGLE_NOUNS = new Set(
 );
 
 type Evidence = { item: string; source: string; observed: string };
-type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[] };
+type Claim = { company: string; claim: string; confidence: number; evidence: Evidence[]; why_relevant?: string };
 type ResearchCommand = {
   command_id: string;
   inquiry_id: string;
@@ -419,18 +419,26 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
     if (bucket.filingSeen) confidence += 0.04;
     confidence = Math.min(0.92, Number(confidence.toFixed(2)));
 
+    // Why this lead matters for THIS buyer — turns a headline into a sales reason.
+    const buyerHint = (cmd.scope.category ?? cmd.question).slice(0, 80);
+    const verb = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion signal";
+    const whyRelevant = `${bucket.name} shows ${verb.toLowerCase()} — likely needs ${buyerHint} soon. Worth checking the ${evidence.length} source${evidence.length === 1 ? "" : "s"} before you commit stock elsewhere.`.slice(
+      0,
+      280,
+    );
+
     claims.push({
       company: bucket.name,
-      claim: `News signal: ${bucket.best.title.replace(/\s+-\s+[^-]+$/, "")}`,
+      claim: bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 500),
       confidence,
       evidence,
+      why_relevant: whyRelevant,
     });
     if (claims.length >= 8) break;
   }
 
   // Strongest first.
   claims.sort((a, b) => b.confidence - a.confidence);
-  void cmd;
   return claims;
 }
 

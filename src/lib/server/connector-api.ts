@@ -44,17 +44,22 @@ const submitSchema = z.object({
     .array(
       z.object({
         company: z.string().min(1).max(120),
-        claim: z.string().min(1).max(500),
+        claim: z.string().min(10).max(500),
         confidence: z.number().min(0).max(1),
+        why_relevant: z.string().max(280).optional(),
         evidence: z
           .array(
             z.object({
-              item: z.string().max(300),
-              source: z.string().max(300),
+              item: z.string().min(10).max(300),
+              source: z
+                .string()
+                .url("source must be a URL")
+                .refine((s) => s.startsWith("https://"), "source must be https://"),
               observed: z.string().max(40),
             }),
           )
-          .min(1),
+          .min(1)
+          .max(6),
       }),
     )
     .max(50),
@@ -270,6 +275,7 @@ async function submitClaims(request: Request): Promise<Response> {
       claim: c.claim,
       confidence: c.confidence,
       evidenceJson: JSON.stringify(c.evidence),
+      whyRelevant: (c as { why_relevant?: string }).why_relevant ?? null,
       submittedAt: nowIso(),
     });
   }

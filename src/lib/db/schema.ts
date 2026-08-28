@@ -56,6 +56,7 @@ export const claims = sqliteTable("claims", {
   claim: text("claim").notNull(),
   confidence: real("confidence").notNull(),
   evidenceJson: text("evidence_json").notNull().default("[]"),
+  whyRelevant: text("why_relevant"),
   tier: text("tier"),
   weight: real("weight"),
   dimsJson: text("dims_json"),

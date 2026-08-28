@@ -284,6 +284,48 @@ export async function runPriceInvoice() {
 export type RunPaymentResult = { ok: true; paidOg: number } | { ok: false; error: string };
 
 /**
+ * Failure credit — when a paid or free run ends as `failed`, the buyer gets
+ * one free retry. Called once per failed inquiry; if that retry itself fails,
+ * it credits again (trust loop until they get a result).
+ */
+export async function grantFailureCredit(identity: string | null, inquiryId: string): Promise<boolean> {
+  if (!identity) return false;
+  await ensureSchema();
+  // Idempotent per inquiry
+  const existing = await db
+    .select()
+    .from(creditLedger)
+    .where(eq(creditLedger.inquiryId, inquiryId));
+  if (existing.some((r) => r.kind === "failure_credit")) return false;
+
+  let [account] = await db.select().from(accounts).where(eq(accounts.identity, identity));
+  if (!account) {
+    const id = newId("ACC");
+    await db.insert(accounts).values({
+      id,
+      identity,
+      credits: 0,
+      freeRunsUsed: 0,
+      createdAt: nowIso(),
+    });
+    [account] = await db.select().from(accounts).where(eq(accounts.identity, identity));
+  }
+  if (!account) return false;
+  await db
+    .update(accounts)
+    .set({ credits: account.credits + 1, updatedAt: nowIso() })
+    .where(eq(accounts.id, account.id));
+  await db.insert(creditLedger).values({
+    accountId: account.id,
+    delta: 1,
+    kind: "failure_credit",
+    inquiryId,
+    createdAt: nowIso(),
+  });
+  return true;
+}
+
+/**
  * Verifies a per-run payment tx: confirmed, paid the platform wallet in
  * native 0G, worth at least one run, and never used for another run.
  * Marks the tx consumed so it can't fund two runs.

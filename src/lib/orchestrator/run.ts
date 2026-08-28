@@ -24,6 +24,7 @@ import { buildSettlement, splitPayment } from "@/lib/0g/payments";
 import { settleCycle } from "@/lib/0g/payouts";
 import { synthesizeInquiry } from "./synthesize";
 import { anchorRecord } from "@/lib/0g/evidence-anchor";
+import { grantFailureCredit } from "./credits";
 
 /**
  * Sourcing window: how long the grid stays open for claims after dispatch.
@@ -194,6 +195,7 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
     // client's poll (getInquiry) or POST /api/cycles/resume once the window
     // closes or all agents have responded.
   } catch (error) {
+    const [inq] = await db.select().from(inquiries).where(eq(inquiries.id, inquiryId));
     await db
       .update(inquiries)
       .set({
@@ -202,6 +204,8 @@ export async function runInquiry(inquiryId: string, submitUrl: string) {
         updatedAt: nowIso(),
       })
       .where(eq(inquiries.id, inquiryId));
+    // Trust: failed run gets a free retry credit so the buyer never pays for nothing
+    void grantFailureCredit(inq?.identity ?? null, inquiryId).catch(() => undefined);
   }
 }
 
@@ -301,7 +305,8 @@ export async function gradeAndSynthesize(inquiryId: string) {
     .set({ status: "grading", updatedAt: nowIso() })
     .where(eq(inquiries.id, inquiryId));
 
-  const rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
+  try {
+    const rawRows = await db.select().from(claims).where(eq(claims.inquiryId, inquiryId));
   const agentRows =
     rawRows.length === 0
       ? []
@@ -697,4 +702,16 @@ export async function gradeAndSynthesize(inquiryId: string) {
         .where(eq(inquiries.id, inquiryId)),
     )
     .catch((err) => console.error("readout anchor failed:", err));
+  } catch (err) {
+    console.error("gradeAndSynthesize failed:", err);
+    await db
+      .update(inquiries)
+      .set({
+        status: "failed",
+        error: err instanceof Error ? err.message : "Grading failure",
+        updatedAt: nowIso(),
+      })
+      .where(eq(inquiries.id, inquiryId));
+    void grantFailureCredit(inquiry?.identity ?? null, inquiryId).catch(() => undefined);
+  }
 }

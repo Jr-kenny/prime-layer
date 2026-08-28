@@ -773,6 +773,11 @@ function Intelligence() {
                   <p className="mx-auto mt-3 max-w-md font-mono text-xs leading-relaxed text-muted-foreground">
                     {inquiry?.error ?? "Something went wrong on our end."}
                   </p>
+                  {identity ? (
+                    <p className="mt-2 font-mono text-[0.65rem] text-signal">
+                      1 free retry added — try again whenever you are ready.
+                    </p>
+                  ) : null}
                 </div>
               ) : (
                 <div className="mt-5 space-y-3">

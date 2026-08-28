@@ -443,13 +443,38 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
 }
 
 export function sourceClusterKey(source: string): string {
-  return source
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/[?#].*$/, "")
-    .replace(/\/+$/, "");
+  const raw = source.trim();
+  try {
+    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    const path = u.pathname.replace(/\/+$/, "") || "/";
+    const tracking = new Set([
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+      "utm_id",
+      "fbclid",
+      "gclid",
+      "msclkid",
+      "igshid",
+      "mc_cid",
+      "mc_eid",
+      "_hsenc",
+      "_hsmi",
+      "yclid",
+    ]);
+    const kept: [string, string][] = [];
+    u.searchParams.forEach((v, k) => {
+      if (!tracking.has(k.toLowerCase()) && !k.toLowerCase().startsWith("utm_")) kept.push([k, v]);
+    });
+    kept.sort(([a], [b]) => a.localeCompare(b));
+    const query = kept.length ? `?${kept.map(([k, v]) => `${k}=${v}`).join("&")}` : "";
+    return `${host}${path}${query}`.toLowerCase();
+  } catch {
+    return source.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/[?#].*$/, "").replace(/\/+$/, "");
+  }
 }
 
 // ─── Grid plumbing ──────────────────────────────────────────────────────────

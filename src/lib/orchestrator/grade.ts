@@ -31,13 +31,45 @@ export type GradedClaim = SubmittedClaim & {
 };
 
 export function sourceClusterKey(source: string): string {
-  return source
-    .trim()
-    .toLowerCase()
-    .replace(/^https?:\/\//, "")
-    .replace(/^www\./, "")
-    .replace(/[?#].*$/, "")
-    .replace(/\/+$/, "");
+  const raw = source.trim();
+  // Try URL-aware canonicalization: keep meaningful query (e.g. tender?id=123), strip tracking.
+  try {
+    const u = new URL(raw.startsWith("http") ? raw : `https://${raw}`);
+    const host = u.hostname.toLowerCase().replace(/^www\./, "");
+    let path = u.pathname.replace(/\/+$/, "") || "/";
+    // Strip tracking params, keep business-relevant ones
+    const tracking = new Set([
+      "utm_source",
+      "utm_medium",
+      "utm_campaign",
+      "utm_term",
+      "utm_content",
+      "utm_id",
+      "fbclid",
+      "gclid",
+      "msclkid",
+      "igshid",
+      "mc_cid",
+      "mc_eid",
+      "_hsenc",
+      "_hsmi",
+      "yclid",
+    ]);
+    const kept: [string, string][] = [];
+    u.searchParams.forEach((v, k) => {
+      if (!tracking.has(k.toLowerCase()) && !k.toLowerCase().startsWith("utm_")) kept.push([k, v]);
+    });
+    kept.sort(([a], [b]) => a.localeCompare(b));
+    const query = kept.length ? `?${kept.map(([k, v]) => `${k}=${v}`).join("&")}` : "";
+    return `${host}${path}${query}`.toLowerCase();
+  } catch {
+    return raw
+      .toLowerCase()
+      .replace(/^https?:\/\//, "")
+      .replace(/^www\./, "")
+      .replace(/[?#].*$/, "")
+      .replace(/\/+$/, "");
+  }
 }
 
 type AgentInfo = { id: string; reliability: number };

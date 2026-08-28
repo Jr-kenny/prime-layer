@@ -188,6 +188,7 @@ async function registerAgent(request: Request): Promise<Response> {
   const existing = await db.select().from(agents).where(eq(agents.endpoint, endpoint));
   if (existing.length > 0) {
     const [row] = existing;
+    const isInternalUpdate = name === "Prime Signals";
     await db
       .update(agents)
       .set({
@@ -195,6 +196,7 @@ async function registerAgent(request: Request): Promise<Response> {
         specialty,
         wallet,
         ...(agenticId ? { agenticId } : {}),
+        ...(isInternalUpdate ? { reliability: 0.9 } : {}),
         status: "online",
         lastSeen: nowIso(),
       })
@@ -203,6 +205,7 @@ async function registerAgent(request: Request): Promise<Response> {
   }
 
   const id = newId("agt");
+  const isInternal = name === "Prime Signals";
   await db.insert(agents).values({
     id,
     name,
@@ -210,6 +213,7 @@ async function registerAgent(request: Request): Promise<Response> {
     endpoint,
     wallet,
     ...(agenticId ? { agenticId } : {}),
+    reliability: isInternal ? 0.9 : 0.8,
     status: "online",
     createdAt: nowIso(),
     lastSeen: nowIso(),

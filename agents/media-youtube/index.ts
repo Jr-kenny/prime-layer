@@ -107,13 +107,25 @@ async function fetchTranscript(videoId: string): Promise<string | null> {
   return null;
 }
 
+// Blocklist for YouTube titles — channels, people, generic labels that are not buyers
+const YT_STOP = new Set("gov governor whitmer pritzker wdrb wave forbes breaking moes natureworks illinois grand opening ceremony cornerstone tour video project construction building new update report announcement live".toLowerCase().split(" "));
 function extractCompany(title: string): string | null {
-  // Reuse simple extraction: first capitalized phrase that looks like a company
   const m = title.match(/\b([A-Z][A-Za-z&.'-]+(?:\s+[A-Z][A-Za-z&.'-]+){0,2})\b/);
   if (!m) return null;
   const name = m[1].trim().replace(/^(The|A|An)\s+/i, "");
   if (name.length < 3 || name.length > 60) return null;
-  if (/^(Tour|Video|Project|Construction|Building|New|Update|Report)$/i.test(name)) return null;
+  if (/^(Tour|Video|Project|Construction|Building|New|Update|Report|Grand|Opening|Live)$/i.test(name)) return null;
+  // single-token gov/person/channel reject
+  const low = name.toLowerCase();
+  if (YT_STOP.has(low)) return null;
+  // any token is a known person/channel/gov word → likely not a company
+  const toks = low.split(/\s+/);
+  if (toks.some(t => YT_STOP.has(t)) && toks.length <= 2) {
+    // e.g. "Gov. Whitmer", "WDRB+WAVE", "Illinois Gov" — reject short combos containing stop word
+    if (toks.some(t => ["gov","governor","whitmer","pritzker","wdrb","wave","forbes"].includes(t))) return null;
+  }
+  // possessive or headline verb fragment
+  if (/^[a-z]+'s$/i.test(toks[0] ?? "")) return null;
   return name;
 }
 
@@ -143,19 +155,34 @@ async function researchAndSubmit(cmd: ResearchCommand): Promise<void> {
     const videoUrl = `https://www.youtube.com/watch?v=${v.videoId}`;
     const transcript = await fetchTranscript(v.videoId);
     const content = transcript ?? v.description ?? v.title;
-    const company = extractCompany(v.title) ?? v.channel ?? "Unknown Developer";
+    // Prefer title-extracted company; fall back to channel only if it looks like a company, never Unknown Developer
+    let company: string | null = extractCompany(v.title);
+    if (!company && v.channel) {
+      // channel often is a media outlet, not a buyer — only trust if it passes company check
+      const ch = extractCompany(v.channel);
+      // also reject obvious outlet names (WDRB, Forbes, etc consolidated in extractCompany already)
+      if (ch && !/^(WDRB|WAVE|Forbes|Breaking|News|Mo.?es|Smart|NatureWorks)$/i.test(ch)) company = ch;
+    }
+    if (!company) continue;
     const observed = v.publishedAt;
 
-    // Simple project info extraction from title/description/transcript
-    const hasProject = /hotel|estate|mall|hospital|plant|factory|building|development|construction/i.test(content);
+    // Project info — require transcript/description to mention concrete work
+    const hasProject = /hotel|estate|mall|hospital|plant|factory|building|development|construction|facility|warehouse|terminal|refinery|mill|store|branch/i.test(content);
     if (!hasProject) continue;
 
     const item = transcript
       ? `Video "${v.title}" by ${v.channel}: transcript reveals ${content.slice(0, 180)}...`
       : `Video "${v.title}" by ${v.channel}: ${v.description.slice(0, 180)}`;
 
-    const hint = (cmd.scope.category ?? cmd.question).slice(0, 60);
-    const why = `We found ${company} in video "${v.title.slice(0, 40)}" by ${v.channel} — it shows active development. Because they're in this build-out phase, they'd likely need ${hint} as the project moves forward. We'd recommend watching the clip for scale and who to contact.` .slice(0, 340);
+    const buyerPhrase = (() => {
+      const cat = (cmd.scope.category ?? "").trim();
+      if (cat.length > 8) return cat.length > 60 ? cat.slice(0,57).replace(/\s+\S*$/, "")+"..." : cat;
+      const m = cmd.question.match(/We (?:have|supply|took in|sell|offer|stock)[^—–.]{0,70}/i);
+      if (m) return m[0].replace(/^We /i, "your ").slice(0, 60);
+      return "what you're moving";
+    })();
+    const transcriptHint = transcript ? "transcript confirms active work" : "description points to active work";
+    const why = `YouTube via ${v.channel} on ${observed}: "${v.title.slice(0, 62)}" — ${transcriptHint}. For ${company}, that build/expansion tends to need ${buyerPhrase} as it progresses. Watch the clip for scale and contacts.`.slice(0, 340);
 
     claims.push({
       company,

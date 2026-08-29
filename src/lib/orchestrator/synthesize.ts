@@ -111,27 +111,55 @@ function fallbackSynthesis(
       });
     }
   }
-  const inventory = question.slice(0, 60);
+  // Build a short buyer phrase without dumping raw question truncated mid-word
+  const buyerPhrase = (() => {
+    // Prefer a short category-ish slice; fallback to generic
+    const catMatch = question.match(/We (?:have|supply|took in|sell|offer|stock)[^—–.]{0,80}/i);
+    if (catMatch) return catMatch[0].replace(/^We /i, "your ").slice(0, 64).replace(/\s+\S*$/, "");
+    const first = question.split(/[.?!—–]/)[0]?.trim() ?? "";
+    if (first.length > 12 && first.length < 70) return first.slice(0, 64);
+    return "what you're moving";
+  })();
   const recs = Array.from(merged.values())
     .sort((a, b) => b.confidence - a.confidence)
     .map((m) => {
-      // Human-spoken body: found -> suggests -> take
-      const found = m.claim;
       const sourceSite = m.sources[0]?.label ?? "a source";
-      const suggests =
-        m.confidence >= 75
-          ? `Because they're in this kind of build-out, they'll likely need ${inventory} in the next few months — the timing lines up.`
-          : `If you sell ${inventory}, this kind of project is the sort that creates that demand — worth checking whether their buying window is still open.`;
-      const take =
-        m.confidence >= 75
-          ? `We'd recommend reaching out to their procurement or project team and pointing to the filing — you've got a real reason to call.`
-          : `We'd suggest a quick check-in with them to confirm scale and whether they've already placed orders.`;
+      // Avoid "We found that We found..." — m.claim or topClaim often already starts with "We found"
+      const rawFound = m.claim.trim();
+      const found = /^We found/i.test(rawFound) ? rawFound : `We found ${rawFound}`;
+      // Strip double prefix if present
+      const foundClean = found.replace(/^We found that We found/i, "We found").replace(/^We found that /i, "We found ");
+      const titleSnippet = rawFound.replace(/^We found\s+/i, "").slice(0, 86);
+      // Vary suggests/take so not every card says "build-out phase"
+      const suggestsPoolHigh = [
+        `That move typically pulls forward demand for ${buyerPhrase} — timing could line up if they haven't bought yet.`,
+        `That kind of development usually needs ${buyerPhrase} as it progresses — worth checking where they are in procurement.`,
+        `If you're selling ${buyerPhrase}, this is the sort of project that creates that need in the next quarter.`,
+      ];
+      const suggestsPoolLow = [
+        `If you sell ${buyerPhrase}, this sort of project is where that demand shows up — worth confirming their buying window.`,
+        `Projects like this tend to need ${buyerPhrase} during fit-out — check if orders are already placed.`,
+        `Worth a look: similar builds have needed ${buyerPhrase} within a few months of this stage.`,
+      ];
+      const takePoolHigh = [
+        `We'd recommend reaching out to procurement and referencing the ${sourceSite} filing — you've got a concrete reason to call.`,
+        `We'd suggest a direct check-in on scale and timeline before they lock in a supplier.`,
+      ];
+      const takePoolLow = [
+        `We'd suggest a quick check-in to confirm scale and whether they've already placed orders.`,
+        `Low lift to verify — ask about remaining scope and who owns purchasing.`,
+      ];
+      // Deterministic pick by name hash so same company varies but not random per render
+      const hash = [...m.name].reduce((a, c) => a + c.charCodeAt(0), 0);
+      const suggests = (m.confidence >= 75 ? suggestsPoolHigh[hash % suggestsPoolHigh.length] : suggestsPoolLow[hash % suggestsPoolLow.length])!;
+      const take = (m.confidence >= 75 ? takePoolHigh[hash % takePoolHigh.length] : takePoolLow[hash % takePoolLow.length])!;
+      const body = foundClean.startsWith("We found")
+        ? `${foundClean} — reported via ${sourceSite}. ${suggests} ${take}`
+        : `We found ${foundClean} — reported via ${sourceSite}. ${suggests} ${take}`;
       return {
         company: m.name,
-        title: found.slice(0, 90),
-        body:
-          `We found that ${found} — reported via ${sourceSite}. ` +
-          `${suggests} ${take}`,
+        title: titleSnippet.slice(0, 90),
+        body,
         confidence: m.confidence,
         sources: m.sources.slice(0, 4),
       };

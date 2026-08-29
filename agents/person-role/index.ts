@@ -58,7 +58,7 @@ const NOT_A_COMPANY = new Set(
     "london dubai asia asian ogun ogunstate ibadan kano abia rivers kaduna enugu anambra delta " +
     "oyo oyoState kwara osun ondo edo katsina sokoto borno yobe adamawa taraba benue plateau " +
     "nasarawa niger zamfara kebbi jigawa gombe ekiti china chinese chineseaided ecowas " +
-    "tinubu obi atiku buhari president minister governor senate house government federal state " +
+    "tinubu obi atiku buhari president minister governor senate house government federal state whitmer pritzker wdrb wave forbes natureworks moes cornerstone grand opening video channel live breaking " +
     "updated breaking exclusive analysis opinion report reports video photos watch " +
     "monday tuesday wednesday thursday friday saturday sunday january february march april " +
     "may june july august september october november december today yesterday tomorrow " +
@@ -300,6 +300,9 @@ function cleanName(raw: string): string | null {
     .replace(/[.,;:]$/, "")
     .trim();
   if (name.length < 3 || name.length > 70) return null;
+  // Reject obvious non-companies: gov persons, media channels, events
+  if (/\b(gov\.?|governor|president|minister|whitmer|pritzker|wdrb|wave|forbes|natureworks|moes|grand\s+opening|cornerstone\s+ceremony)\b/i.test(name)) return null;
+  if (name.includes("+")) return null;
   if (/^(news|update|report|weekly|daily|breaking)$/i.test(name)) return null;
 
   const tokens = name.toLowerCase().split(/\s+/);
@@ -443,17 +446,31 @@ function toClaims(signals: RawSignal[], cmd: ResearchCommand): Claim[] {
     if (bucket.filingSeen) confidence += 0.04;
     confidence = Math.min(0.92, Number(confidence.toFixed(2)));
 
-    // Why this lead matters for THIS buyer — human-spoken, fact → suggestion → take
-    const buyerHint = (cmd.scope.category ?? cmd.question).slice(0, 80);
-    const verb = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion signal";
+    // Why this lead matters for THIS buyer — varied, evidence-specific; no canned "build-out phase" repeat
+    const buyerPhrase = (() => {
+      const cat = (cmd.scope.category ?? "").trim();
+      if (cat.length > 8) return cat.length > 64 ? cat.slice(0, 61).replace(/\s+\S*$/, "") + "..." : cat;
+      const q = cmd.question;
+      const m = q.match(/We (?:have|supply|took in|sell|offer|stock)[^—–.]{0,70}/i);
+      if (m) return m[0].replace(/^We /i, "your ").slice(0, 64);
+      // fallback — don't dump raw question truncated
+      return "what you're moving";
+    })();
+    const verbRaw = bucket.best.title.match(SIGNAL_RE)?.[0] ?? "expansion";
+    const verb = verbRaw.toLowerCase();
     const sourceSite = (() => {
       try { return bucket.best.publisherUrl ? new URL(bucket.best.publisherUrl).hostname.replace(/^www\./, "") : "news"; } catch { return "news"; }
     })();
     const date = bucket.best.publishedAt;
-    const whyRelevant = `We found ${bucket.name} shows ${verb.toLowerCase()} — reported via ${sourceSite} on ${date}. Because they're in this phase, they'd likely need ${buyerHint} in the next few months — timing lines up. We'd recommend checking whether their buying is still open before you commit stock elsewhere.`.slice(
-      0,
-      340,
-    );
+    const titleSnippet = bucket.best.title.replace(/\s+-\s+[^-]+$/, "").slice(0, 72).replace(/"/g, "'");
+    const verbType: "invest" | "build" | "open" | "expand" = /invest|funding|raise|acquir|merger/i.test(verb) ? "invest" : /construction|build|groundbreak|refurbish|renovat|fit-out|fitout/i.test(verb) ? "build" : /open|inaugurat|commission|launch|unveil|flagship/i.test(verb) ? "open" : "expand";
+    const whyByType: Record<string, string> = {
+      invest: `We found ${bucket.name} shows ${verb} — reported via ${sourceSite} on ${date}. That capital move typically precedes buying ${buyerPhrase} within the quarter — check if their procurement window is still open.`,
+      build: `${bucket.name}: ${verb} flagged via ${sourceSite} on ${date} — "${titleSnippet}". Projects at this stage tend to need ${buyerPhrase} as they fit out. Worth confirming scale and whether orders are placed.`,
+      open: `Via ${sourceSite} on ${date}: ${bucket.name} ${verb} — "${titleSnippet}". Openings pull forward demand for ${buyerPhrase}; timing lines up if they haven't stocked yet.`,
+      expand: `We found ${bucket.name} — ${verb} signal via ${sourceSite} on ${date}. Expansion like this often creates demand for ${buyerPhrase} in the next few months. Quick check on buying status is worthwhile.`,
+    };
+    const whyRelevant = whyByType[verbType]!.slice(0, 360);
 
     // Contact: when an individual is the business (X/Medium/LinkedIn post tied 1:1
     // to the name), the source itself is the contact — only when sure.

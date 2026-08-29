@@ -73,6 +73,32 @@ type RunHistoryRow = {
   error?: string | null;
 };
 
+const FACTS = [
+  "World trade in intermediate goods is ~50% of total trade — demand forms in the middle of the chain, not at the shelf.",
+  "A 250-room hotel at fit-out needs ~1,200 lighting points and 300+ electrical panels before a guest arrives.",
+  "Cold-chain breaks cause ~13% of global food loss — every new pharma/food plant expansion is a packaging opportunity.",
+  "Factory construction to first production averages 18 months — procurement happens at month 12-15, not day one.",
+  "GDELT monitors 100+ languages; the best procurement signals are often in local business press, not global wires.",
+  "SEC 8-K filings are primary sources — they outrank news because the company files under penalty.",
+  "Five agents citing one press release = one source. One permit + one contractor statement = stronger corroboration.",
+  "Demand is perishable: the moment a tender is awarded, the window closes. Timing is the product.",
+  "Infrastructure projects create second-order demand — a new estate needs schools, clinics, retail, and their fit-out.",
+  "Verification matters: announcements drift — Dec 2026 vs Jun 2027 completions both happen. We surface contradictions.",
+];
+
+function RotatingFacts() {
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    const id = window.setInterval(() => setI((v) => (v + 1) % FACTS.length), 3200);
+    return () => window.clearInterval(id);
+  }, []);
+  return (
+    <p className="mt-2 min-h-[2.5rem] text-sm leading-relaxed text-ink">
+      <span className="font-mono text-xs text-signal">#{String(i + 1).padStart(2, "0")}</span> — {FACTS[i]}
+    </p>
+  );
+}
+
 function Intelligence() {
   const [query, setQuery] = useState(
     "Which hotel chains and manufacturers are expanding or building new facilities right now?",
@@ -139,6 +165,7 @@ function Intelligence() {
   );
 
   const poll = useCallback((inquiryId: string) => {
+    try { sessionStorage.removeItem("prime-layer:dismissed"); } catch {}
     if (pollRef.current) window.clearInterval(pollRef.current);
     let ticks = 0;
     pollRef.current = window.setInterval(async () => {
@@ -177,6 +204,7 @@ function Intelligence() {
   // Resume + history: runs belong to the account on the server. On sign-in,
   // adopt any in-flight run (refresh / dead phone / new device) and load the
   // workspace's run history. No browser storage involved.
+  // If user hit New request and navigated away without running, don't snap back to last readout.
   const refreshRuns = useCallback(() => {
     if (!identity) return;
     void latestActiveRun({ data: { identity } }).then((activeRun) => {
@@ -188,8 +216,11 @@ function Intelligence() {
       if (!rows.length) return;
       setHistory(rows);
       // If nothing is in flight, show the most recent finished readout so the
-      // workspace always opens with the last result they paid for.
+      // workspace always opens with the last result they paid for — unless user dismissed it.
       if (phase === "idle") {
+        try {
+          if (sessionStorage.getItem("prime-layer:dismissed") === "1") return;
+        } catch {}
         const last = rows.find((r) => r.complete);
         if (last) {
           void getInquiry({ data: last.id }).then((state) => {
@@ -463,10 +494,11 @@ function Intelligence() {
                 type="button"
                 onClick={() => {
                   if (pollRef.current) window.clearInterval(pollRef.current);
+                  try { sessionStorage.setItem("prime-layer:dismissed", "1"); } catch {}
                   setPhase("idle");
                   setInquiry(null);
                 }}
-                className="rounded-sm border border-ink-border px-3.5 py-1.5 text-xs font-medium hover:border-signal hover:text-signal"
+                className="rounded-sm border border-white/20 bg-white/5 px-3.5 py-1.5 text-xs font-medium text-vellum hover:border-signal hover:text-signal hover:bg-white/10"
               >
                 New request
               </button>
@@ -787,6 +819,31 @@ function Intelligence() {
                     broke. Try a different question, or check back soon. The moment something moves,
                     it'll show up here.
                   </p>
+                </div>
+              ) : phase === "running" ? (
+                <div className="mt-5 space-y-4">
+                  <div className="surface p-5 sm:p-6">
+                    <p className="label-mono text-signal">Researching your request…</p>
+                    <h3 className="mt-2 font-display text-xl">The grid is working — give us a moment</h3>
+                    <p className="mt-2 text-sm leading-relaxed text-muted-foreground">
+                      We dispatched to {agents.length} agents. They have a 90-second window to submit. Claims are clustered live — the readout appears as soon as grading finishes.
+                    </p>
+                    <div className="mt-5 border-t border-border pt-4">
+                      <p className="label-mono text-muted-foreground">While you wait</p>
+                      <RotatingFacts />
+                    </div>
+                    <p className="mt-4 font-mono text-[0.65rem] text-ink-muted">
+                      Tip: you can switch tabs — we keep polling and will show the readout when it lands.
+                    </p>
+                  </div>
+                  <div className="surface p-4 sm:p-5 opacity-60">
+                    <p className="label-mono text-muted-foreground">What came back will appear here</p>
+                    <div className="mt-3 space-y-2">
+                      <div className="h-3 w-3/4 animate-pulse rounded bg-border" />
+                      <div className="h-3 w-1/2 animate-pulse rounded bg-border" />
+                      <div className="h-12 w-full animate-pulse rounded bg-border/60" />
+                    </div>
+                  </div>
                 </div>
               ) : phase === "failed" ? (
                 <div className="surface mt-5 p-8 text-center animate-in fade-in duration-300">

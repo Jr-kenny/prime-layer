@@ -25,10 +25,13 @@ AGENTS = [
   ("synthesis", 8099),
 ]
 
-# 1. Pull /opt/prime-layer env into a base64 blob — same approach as deploy-aws-agent.sh
+# 1. Pull live env — prefer .env.live-turso-backup (local dev now uses file DB)
 def get(key):
-    out = subprocess.run(['grep', f'^{key}=', '.env'], capture_output=True, text=True).stdout
-    return out.split('=', 1)[1].strip().strip('"') if out else ''
+    for fname in ['.env.live-turso-backup', '.env']:
+        out = subprocess.run(['grep', f'^{key}=', fname], capture_output=True, text=True).stdout
+        if out:
+            return out.split('=', 1)[1].strip().strip('"').strip("'").strip()
+    return ''
 
 env = {
   'ZERO_G_NETWORK': 'mainnet',
@@ -56,6 +59,7 @@ ExecStart={BUN_REMOTE} run agents/{name}/index.ts
 WorkingDirectory={APP_REMOTE}
 EnvironmentFile={APP_REMOTE}/.env
 Environment=CONNECTOR_PORT={port}
+Environment=CONNECTOR_PUBLIC_URL=http://100.61.3.35:{port}
 Restart=always
 RestartSec=5
 

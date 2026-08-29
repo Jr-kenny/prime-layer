@@ -31,6 +31,8 @@ const YOUTUBE_API_KEY = process.env["YOUTUBE_API_KEY"]?.trim() ?? "";
 const NAME = "media-youtube — Media — YouTube interviews podcasts audiovisual";
 const SPECIALTY = "Media — YouTube interviews podcasts audiovisual — discovers videos, extracts transcripts, identifies projects and entities";
 
+const PUBLIC_URL = process.env["CONNECTOR_PUBLIC_URL"] ?? `http://localhost:${PORT}`;
+
 const wallet = process.env["CONNECTOR_WALLET"] ?? new ethers.Wallet(ethers.Wallet.createRandom().privateKey).address;
 
 type Evidence = { item: string; source: string; observed: string };
@@ -214,7 +216,7 @@ async function register(): Promise<string> {
   const res = await fetch(`${ORCHESTRATOR}/api/agents/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: NAME, specialty: SPECIALTY, endpoint: `http://localhost:${PORT}/claim`, wallet }),
+    body: JSON.stringify({ name: NAME, specialty: SPECIALTY, endpoint: `${PUBLIC_URL}/claim`, wallet }),
     signal: AbortSignal.timeout(5000),
   });
   if (!res.ok) throw new Error(`register ${res.status}: ${await res.text()}`);
@@ -243,7 +245,7 @@ async function main() {
       }
     },
   });
-  console.log(`YouTube agent listening on http://localhost:${server.port}/claim`);
+  console.log(`YouTube agent listening on ${PUBLIC_URL}/claim`);
 }
 
 if (import.meta.main) void main();

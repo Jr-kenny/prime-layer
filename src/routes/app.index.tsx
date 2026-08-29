@@ -56,9 +56,9 @@ type ReadoutEntry = {
 };
 
 const EXAMPLES = [
-  "We took in $13M of mixed industrial stock with 6 months to move it — HVAC units, electrical switchgear, shelving/racking, packaging and cold-chain equipment. Based in Lagos, can ship across West Africa. Find private-sector manufacturers, food processors, pharma/logistics operators and commercial developers with active builds, expansions, refurbishments or tenders in Nigeria whose fit-out/procurement window is in the next 3–6 months. Name the operator, not the government.",
-  "We supply packaging materials and cold-chain equipment — which food processors, beverage plants and pharma distributors are expanding capacity or building new facilities in Nigeria and Ghana this quarter? Prioritize projects still in procurement.",
-  "We have electrical and HVAC inventory to move in 90 days — which commercial real-estate, hospital and factory projects in Lagos and South-West Nigeria are at fit-out stage and likely to need these categories? Include source links and timing.",
+  "Which hotel chains and manufacturers are expanding or building new facilities right now?",
+  "We took in $13M of mixed industrial stock with 6 months to move it — find partners worldwide whose projects or expansions will need it soon.",
+  "We supply packaging materials and cold-chain equipment — which food processors and pharma distributors are expanding capacity this quarter?",
 ];
 
 type RunHistoryRow = {
@@ -75,7 +75,7 @@ type RunHistoryRow = {
 
 function Intelligence() {
   const [query, setQuery] = useState(
-    "We took in $13M of mixed industrial stock with 6 months to move it — HVAC units, electrical switchgear, shelving/racking, packaging and cold-chain equipment. Based in Lagos, can ship across West Africa. Find private-sector manufacturers, food processors, pharma/logistics operators and commercial developers with active builds, expansions, refurbishments or tenders in Nigeria whose fit-out/procurement window is in the next 3–6 months. Name the operator, not the government.",
+    "Which hotel chains and manufacturers are expanding or building new facilities right now?",
   );
   const [phase, setPhase] = useState<"idle" | "running" | "done" | "failed">("idle");
   const [inquiry, setInquiry] = useState<InquiryState | null>(null);
@@ -364,7 +364,7 @@ function Intelligence() {
                   onChange={(event) => setQuery(event.target.value)}
                   readOnly={submitting}
                   aria-readonly={submitting}
-                  placeholder="e.g. We have $13M mixed industrial stock (HVAC, electrical, shelving, cold-chain) to move in 6 months — which Nigerian manufacturers, pharma/logistics and developers have active builds whose fit-out lines up next quarter?"
+                  placeholder="e.g. We have $2M of packaging stock to move — which food processors and logistics firms are expanding right now?"
                   className="mt-3 w-full"
                 />
                 <div className="app-query-meta">

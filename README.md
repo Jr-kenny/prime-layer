@@ -1,14 +1,14 @@
 # Prime Layer
 
-**A business tells the network what it needs to move. Specialist agents fan out across the open web, filings and video, and what comes back is not a lead list — it is a short readout of real companies showing live demand signals, every name carrying its evidence.**
+**A business tells the network what it needs to move. Specialist agents fan out across the open web, filings and video, and what comes back is a short readout of real companies showing live demand signals, every name carrying its evidence.**
 
-The buyer states a question in plain language — *“I have $500k of electrical appliances, find buyers”*, *“we took in $13M of mixed stock, find partners”*, *“which food processors are expanding?”* — and the system investigates, not searches. The orchestrator decomposes the objective into hypotheses, agents discover signals of future demand, the evidence is clustered, scored and synthesized into ranked opportunities with reasoning and sources.
+The buyer states a question in plain language — *“I have $500k of electrical appliances, find buyers”*, *“we took in $13M of mixed stock, find partners”*, *“which food processors are expanding?”* — and the system investigates. The orchestrator decomposes the objective into hypotheses, agents discover signals of future demand, the evidence is clustered, scored and synthesized into ranked opportunities with reasoning and sources.
 
 ## Product Direction — Autonomous Commercial Intelligence Network
 
 This is the spec the repo implements (condensed from the 18-point direction):
 
-**The core product is not a search box and not a lead database.** It answers: *where is commercial demand forming right now, why do we believe it exists, who is involved, when is the buying window, and what evidence proves it?*
+**The core product is a demand intelligence network.** It answers: *where is commercial demand forming right now, why do we believe it exists, who is involved, when is the buying window, and what evidence proves it?*
 
 **Pipeline:** Raw information → Signals → Entities → Relationships → Hypotheses → Verification → Commercial intent → Ranked opportunities → Action. Every important claim is traceable to one or more sources; inference is never presented as fact.
 
@@ -18,7 +18,7 @@ This is the spec the repo implements (condensed from the 18-point direction):
 
 Directions adapt to whatever the buyer sells — new facilities & construction, operations expansion, infrastructure & large projects, replacement & upgrade cycles — not preset to electrical.
 
-**Agents discover signals, not keywords.** Weak: `hotel electrical appliances Nigeria`. Strong: `Company X announced a 250-room hotel` → that is a demand signal → investigate Company X, its contractor, electrical contractor, procurement status, scale, timeline, decision makers.
+**Agents discover signals.** Weak query: `hotel electrical appliances Nigeria`. Strong signal: `Company X announced a 250-room hotel` → a demand signal worth investigating for owner, contractor, electrical contractor, procurement status, scale, timeline and decision makers.
 
 **Evidence Graph:** Person → works for → Engineering Company → contracted for → Hotel Project → requires → Electrical Installation → location → City X → owned by → Developer → status → Under Construction. Facts are edges with proof; inferences are edges with weight.
 
@@ -41,7 +41,7 @@ Directions adapt to whatever the buyer sells — new facilities & construction, 
 
 External contributor agents stay generic; the orchestrator is strict with internal agents and knows what each does.
 
-**YouTube is first-class:** Not a search engine — a construction tour video reveals project name, developer, location, stage, contractor, size, timeline, equipment installed/still required, people involved. Full pipeline: discover → metadata → transcript → analyze → entities → claims → project info → link to evidence → follow-ups → store.
+**YouTube is first-class:** A construction tour video reveals project name, developer, location, stage, contractor, size, timeline, equipment installed and still required, and people involved. Full pipeline: discover → metadata → transcript → analyze → entities → claims → project info → link to evidence → follow-ups → store.
 
 **Signal → Hypothesis → Verification → Opportunity:** A source observation → reasoning that it implies need → investigation of owner/contractor/status/procurement/size/timeline → independent verification → ranked opportunity with score, window, contacts, recommended action.
 

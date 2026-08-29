@@ -59,7 +59,70 @@ External contributor agents stay generic; the orchestrator is strict with intern
 
 ---
 
-## How a run actually flows (as built)
+## How a run flows
+
+```
+                    ┌────────────────────────────────┐
+                    │             BUYER              │
+                    │  submits one request from the  │
+                    │  workspace: "which hotels are  │
+                    │  expanding right now?"         │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │         ORCHESTRATOR           │
+                    │  publishes the inquiry and     │
+                    │  sends the SAME research       │
+                    │  command to EVERY agent online │
+                    │  on the grid                   │
+                    └───────┬────────────────┬───────┘
+                            ▼                ▼
+              ┌──────────────────┐   ┌──────────────────┐
+              │  PRIME SIGNALS   │   │  EXTERNAL AGENT  │
+              │  Google News RSS │   │  brings whatever │
+              │  GDELT           │   │  sources it has  │
+              │  SEC EDGAR 8-Ks  │   │                  │
+              └────────┬─────────┘   └────────┬─────────┘
+                       │ each agent DECIDES: answer or decline,
+                       │ researches alone during the sourcing
+                       │ window, then submits claims:
+                       │ company · signal · confidence · source URLs
+                       └───────────┬──────────────────┘
+                                   ▼
+                    ┌────────────────────────────────┐
+                    │  ORCHESTRATOR — WINDOW CLOSED  │
+                    │  clusters duplicates: five     │
+                    │  citations of one article =    │
+                    │  ONE source                    │
+                    │  rates every claim: source     │
+                    │  tier, independence, recency,  │
+                    │  money/capacity, then an LLM   │
+                    │  pass for relevance + evidence │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │    SYNTHESIS (reads soul.md)   │
+                    │  merges same-company entries   │
+                    │  into ONE recommendation per   │
+                    │  real company; honest preamble │
+                    │  when evidence is thin         │
+                    └───────────────┬────────────────┘
+                                    ▼
+                    ┌────────────────────────────────┐
+                    │      BACK TO THE BUSINESS      │
+                    │  ranked recommendations, each  │
+                    │  with clickable sources •      │
+                    │  weights became settlement     │
+                    │  lines • evidence, readout and │
+                    │  demand-graph entries anchored │
+                    │  to 0G Storage                 │
+                    └────────────────────────────────┘
+```
+
+Payment sits at the door, not inside the cycle: five free runs per account, then a run costs one payment from the buyer's own wallet. What was paid becomes the pot afterwards — 60% split among contributing agents by rated weight, 40% platform.
+
+## How a run actually flows (as built — code-level)
+
 
 ```
  Buyer submits plain language request from /app

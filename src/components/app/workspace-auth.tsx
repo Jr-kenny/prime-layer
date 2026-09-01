@@ -199,9 +199,23 @@ export function WorkspaceAuth() {
         </p>
       )}
       {wallet && (
-        <p className="truncate font-mono text-[0.62rem] text-ink-muted" title={wallet}>
-          settlement · {wallet.slice(0, 6)}…{wallet.slice(-4)}
-        </p>
+        <button
+          type="button"
+          onClick={() => {
+            void navigator.clipboard.writeText(wallet).then(() => {
+              const el = document.getElementById("wallet-copied");
+              if (el) {
+                el.textContent = "copied";
+                window.setTimeout(() => (el.textContent = "copy"), 1500);
+              }
+            });
+          }}
+          className="mt-1 block w-full truncate text-left font-mono text-[0.62rem] text-ink-muted underline-offset-2 hover:text-signal"
+          title={`${wallet} — click to copy`}
+          aria-label="Copy settlement wallet address"
+        >
+          settlement · {wallet.slice(0, 6)}…{wallet.slice(-4)} <span id="wallet-copied" className="text-signal">copy</span>
+        </button>
       )}
       <WalletBalanceLine address={wallet} />
       <button
